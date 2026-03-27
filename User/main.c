@@ -360,8 +360,6 @@ void Clear_Uart_CommandBuffer(void)
 
 float my_sin(float x)
 {
-    while (x > PI_VAL) x -= 2.0f * PI_VAL;
-    while (x < -PI_VAL) x += 2.0f * PI_VAL;
     return sinf(x);
 }
 
@@ -372,29 +370,36 @@ float my_cos(float x)
 
 float my_tan(float x)
 {
-    float c = my_cos(x);
-    if (fabsf(c) < 0.001f) return (my_sin(x) >= 0.0f) ? 1000.0f : -1000.0f;
-    return my_sin(x) / c;
+    float v = tanf(x);
+    if (!isfinite(v)) {
+        return (sinf(x) >= 0.0f) ? 100.0f : -100.0f;
+    }
+    if (v > 100.0f) return 100.0f;
+    if (v < -100.0f) return -100.0f;
+    return v;
 }
 
 float my_sa(float x)
 {
     if (fabsf(x) < 0.0001f) return 1.0f;
-    return my_sin(x) / x;
+    return sinf(x) / x;
 }
 
 float my_abs(float x)
 {
-    return (x < 0.0f) ? -x : x;
+    return fabsf(x);
 }
 
 float my_sqrt(float x)
 {
-    return (x <= 0.0f) ? 0.0f : sqrtf(x);
+    if (x < 0.0f) return 0.0f;
+    return sqrtf(x);
 }
 
 float my_exp(float x)
 {
+    if (x > 10.0f) x = 10.0f;
+    if (x < -10.0f) x = -10.0f;
     return expf(x);
 }
 
@@ -402,13 +407,7 @@ float my_pow(float base, float p)
 {
     if (base < 0.0f) {
         int pInt = (int)p;
-        if ((float)pInt == p) {
-            float result = 1.0f;
-            int count = (pInt < 0) ? -pInt : pInt;
-            for (int i = 0; i < count; i++) result *= base;
-            return (pInt < 0) ? (1.0f / result) : result;
-        }
-        return 0.0f;
+        if ((float)pInt != p) return 0.0f;
     }
     return powf(base, p);
 }
@@ -563,9 +562,16 @@ void Parse_Custom_Function(char *str)
     compact[j] = '\0';
 
     for (uint16_t i = 0; i < DAC_TABLE_SIZE; i++) {
+        float value;
         gCurrentExprX = (2.0f * PI_VAL * (float)i) / (float)DAC_TABLE_SIZE;
         gExprPtr = compact;
-        gCustomRawData[i] = Parse_Expr();
+        value = Parse_Expr();
+        if (!isfinite(value)) {
+            value = 0.0f;
+        }
+        if (value > 100.0f) value = 100.0f;
+        if (value < -100.0f) value = -100.0f;
+        gCustomRawData[i] = value;
     }
 }
 
