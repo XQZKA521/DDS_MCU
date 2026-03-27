@@ -1,0 +1,107 @@
+﻿[
+  {
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/User/main.c",
+    "arguments": [
+      "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
+      "--target=arm-arm-none-eabi",
+      "-mcpu=cortex-m0plus",
+      "-std=c99",
+      "-D__MSPM0G3519__",
+      "-I.",
+      "-IProject",
+      "-IUser",
+      "-IBSP",
+      "-IBSP/delay",
+      "-ISource",
+      "-ISource/third_party/CMSIS/Core/Include",
+      "-IC:/Software/Keil_v5/ARM/ARMCLANG/include",
+      "-c",
+      "User/main.c"
+    ]
+  },
+  {
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/User/ti_msp_dl_config.c",
+    "arguments": [
+      "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
+      "--target=arm-arm-none-eabi",
+      "-mcpu=cortex-m0plus",
+      "-std=c99",
+      "-D__MSPM0G3519__",
+      "-I.",
+      "-IProject",
+      "-IUser",
+      "-IBSP",
+      "-IBSP/delay",
+      "-ISource",
+      "-ISource/third_party/CMSIS/Core/Include",
+      "-IC:/Software/Keil_v5/ARM/ARMCLANG/include",
+      "-c",
+      "User/ti_msp_dl_config.c"
+    ]
+  },
+  {
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/Project/key.c",
+    "arguments": [
+      "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
+      "--target=arm-arm-none-eabi",
+      "-mcpu=cortex-m0plus",
+      "-std=c99",
+      "-D__MSPM0G3519__",
+      "-I.",
+      "-IProject",
+      "-IUser",
+      "-IBSP",
+      "-IBSP/delay",
+      "-ISource",
+      "-ISource/third_party/CMSIS/Core/Include",
+      "-IC:/Software/Keil_v5/ARM/ARMCLANG/include",
+      "-c",
+      "Project/key.c"
+    ]
+  },
+  {
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/Project/oled.c",
+    "arguments": [
+      "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
+      "--target=arm-arm-none-eabi",
+      "-mcpu=cortex-m0plus",
+      "-std=c99",
+      "-D__MSPM0G3519__",
+      "-I.",
+      "-IProject",
+      "-IUser",
+      "-IBSP",
+      "-IBSP/delay",
+      "-ISource",
+      "-ISource/third_party/CMSIS/Core/Include",
+      "-IC:/Software/Keil_v5/ARM/ARMCLANG/include",
+      "-c",
+      "Project/oled.c"
+    ]
+  },
+  {
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/Project/DHT11.c",
+    "arguments": [
+      "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
+      "--target=arm-arm-none-eabi",
+      "-mcpu=cortex-m0plus",
+      "-std=c99",
+      "-D__MSPM0G3519__",
+      "-I.",
+      "-IProject",
+      "-IUser",
+      "-IBSP",
+      "-IBSP/delay",
+      "-ISource",
+      "-ISource/third_party/CMSIS/Core/Include",
+      "-IC:/Software/Keil_v5/ARM/ARMCLANG/include",
+      "-c",
+      "Project/DHT11.c"
+    ]
+  }
+]

@@ -1,0 +1,23 @@
+# Keil
+*.uvoptx
+*.uvguix.*
+*.bak
+*.tmp
+*.log
+*.dep
+
+# Build output
+*.o
+*.axf
+*.hex
+*.bin
+*.map
+Objects/
+Listings/
+
+# VSCode
+.vscode/*
+
+# 系统
+.DS_Store
+Thumbs.db
