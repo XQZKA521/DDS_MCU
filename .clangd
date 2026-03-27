@@ -1,0 +1,15 @@
+﻿CompileFlags:
+  Add:
+    - --target=arm-arm-none-eabi
+    - -mcpu=cortex-m0plus
+    - -std=c99
+    - -D__MSPM0G3519__
+    - -I.
+    - -IProject
+    - -IUser
+    - -IBSP
+    - -IBSP/delay
+    - -ISource
+    - -ISource/third_party/CMSIS/Core/Include
+    - -IC:/Software/Keil_v5/ARM/ARMCLANG/include
+  Compiler: C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe
