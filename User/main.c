@@ -1470,8 +1470,7 @@ void PWM_0_OutputOnePeriod(void)
     DL_TimerG_clearInterruptStatus(PWM_0_INST, DL_TIMER_INTERRUPT_LOAD_EVENT);
     DL_TimerG_startCounter(PWM_0_INST);
 }
-int16_t a = 1;
-int b = 2;
+
 
 void PWM_0_INST_IRQHandler(void)
 {
