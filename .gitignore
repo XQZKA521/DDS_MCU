@@ -21,3 +21,28 @@ Listings/
 # 系统
 .DS_Store
 Thumbs.db
+
+# clangd cache
+.cache/
+.clangd/
+
+# VS Code
+.vscode/
+
+# Keil build/intermediate
+Objects/
+Listings/
+*.axf
+*.map
+*.hex
+*.bin
+*.o
+*.d
+
+# Keil user/temp
+*.uvoptx
+*.uvguix.*
+*.bak
+*.dep
+*.tmp
+*.log
