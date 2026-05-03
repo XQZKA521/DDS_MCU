@@ -1,19 +1,30 @@
-#include "ti_msp_dl_config.h"
+ï»¿#include "ti_msp_dl_config.h"
 #include <stdint.h>
 #include "DHT11.h"
 
-//¸Ãº¯ÊıÎªÇı¶¯ÎÂÊª¶È´«¸ĞÆ÷DHT11µÄÇı¶¯
+//è¯¥å‡½æ•°ä¸ºé©±åŠ¨æ¸©æ¹¿åº¦ä¼ æ„Ÿå™¨DHT11çš„é©±åŠ¨
 
 /*
 typedef struct {
-    uint8_t humidity;      // Êª¶ÈÕûÊı²¿·Ö
-    uint8_t temperature;   // ÎÂ¶ÈÕûÊı²¿·Ö
-    uint8_t checksum_ok;   // 1=Ğ£Ñé³É¹¦, 0=Ê§°Ü
-    uint8_t timeout;       // 1=Í¨ĞÅ³¬Ê±, 0=Õı³£
+    uint8_t humidity;      // æ¹¿åº¦æ•´æ•°éƒ¨åˆ†
+    uint8_t temperature;   // æ¸©åº¦æ•´æ•°éƒ¨åˆ†
+    uint8_t checksum_ok;   // 1=æ ¡éªŒæˆåŠŸ, 0=å¤±è´¥
+    uint8_t timeout;       // 1=é€šä¿¡è¶…æ—¶, 0=æ­£å¸¸
 } DHT11_Data_t;
 */
-// ===== »ù´¡ÑÓÊ± =====
-// Äãµ±Ç°¹¤³ÌÖ÷Æµ½Ó½ü 80MHz£¬ÕâÀï°´ 80MHz ´ÖÂÔÑÓÊ±
+// ===== åŸºç¡€å»¶æ—¶ =====
+// ä½ å½“å‰å·¥ç¨‹ä¸»é¢‘æ¥è¿‘ 80MHzï¼Œè¿™é‡ŒæŒ‰ 80MHz ç²—ç•¥å»¶æ—¶
+#define DHT11_START_LOW_MS          20U
+#define DHT11_RELEASE_US            40U
+#define DHT11_MODE_SETTLE_US        8U
+#define DHT11_RESPONSE_TIMEOUT_US   1000U
+#define DHT11_BIT_LOW_TIMEOUT_US    100U
+#define DHT11_BIT_HIGH_TIMEOUT_US   100U
+#define DHT11_BIT_END_TIMEOUT_US    120U
+#define DHT11_BIT_SAMPLE_US         40U
+#define DHT11_RETRY_COUNT           3U
+#define DHT11_RETRY_GAP_MS          2U
+
 static void DHT11_DelayUs(uint32_t us)
 {
     delay_cycles(us * 80);
@@ -26,20 +37,18 @@ static void DHT11_DelayMs(uint32_t ms)
     }
 }
 
-// ===== ¶¯Ì¬ÇĞ»» PC7 ÎªÊä³ö/ÊäÈë =====
+// ===== åŠ¨æ€åˆ‡æ¢ DHT11 å¼•è„šä¸ºè¾“å‡º/è¾“å…¥ =====
 static void DHT11_PinMode_Output(void)
 {
     DL_GPIO_initDigitalOutput(DHT11_DHT1_IOMUX);
     DL_GPIO_clearPins(DHT11_PORT, DHT11_DHT1_PIN);
     DL_GPIO_enableOutput(DHT11_PORT, DHT11_DHT1_PIN);
+    DHT11_DelayUs(DHT11_MODE_SETTLE_US);
 }
 
 static void DHT11_PinMode_Input(void)
 {
-    // ÏÈÃ÷È·¹Ø±ÕÊä³öÇı¶¯£¬ÕæÕıÊÍ·Å×ÜÏß
     DL_GPIO_disableOutput(DHT11_PORT, DHT11_DHT1_PIN);
-
-    // ÔÙÇĞ³ÉÊı×ÖÊäÈë + ÉÏÀ­
     DL_GPIO_initDigitalInputFeatures(
         DHT11_DHT1_IOMUX,
         DL_GPIO_INVERSION_DISABLE,
@@ -47,6 +56,7 @@ static void DHT11_PinMode_Input(void)
         DL_GPIO_HYSTERESIS_DISABLE,
         DL_GPIO_WAKEUP_DISABLE
     );
+    DHT11_DelayUs(DHT11_MODE_SETTLE_US);
 }
 
 static void DHT11_WriteHigh(void)
@@ -64,7 +74,7 @@ static uint8_t DHT11_ReadPin(void)
     return (DL_GPIO_readPins(DHT11_PORT, DHT11_DHT1_PIN) ? 1 : 0);
 }
 
-// µÈ´ıÒı½Å±ä³ÉÖ¸¶¨µçÆ½£¬´ø³¬Ê±£¬·µ»Ø 1 ³É¹¦£¬0 ³¬Ê±
+// ç­‰å¾…å¼•è„šå˜æˆæŒ‡å®šç”µå¹³ï¼Œå¸¦è¶…æ—¶ï¼Œè¿”å› 1 æˆåŠŸï¼Œ0 è¶…æ—¶
 static uint8_t DHT11_WaitLevel(uint8_t level, uint32_t timeout_us)
 {
     while (timeout_us--) {
@@ -76,26 +86,26 @@ static uint8_t DHT11_WaitLevel(uint8_t level, uint32_t timeout_us)
     return 0;
 }
 
-// ¶ÁÈ¡ 1bit
+// è¯»å– 1bit
 static uint8_t DHT11_ReadBit(uint8_t *bit)
 {
-    // Ã¿Ò»Î»¿ªÊ¼£ºÏÈÓĞÔ¼ 50us µÍµçÆ½
-    if (!DHT11_WaitLevel(0, 70)) return 0;
-    if (!DHT11_WaitLevel(1, 70)) return 0;
+    // æ¯ä¸€ä½å¼€å§‹ï¼šå…ˆæœ‰çº¦ 50us ä½ç”µå¹³
+    if (!DHT11_WaitLevel(0, DHT11_BIT_LOW_TIMEOUT_US)) return 0;
+    if (!DHT11_WaitLevel(1, DHT11_BIT_HIGH_TIMEOUT_US)) return 0;
 
-    // À­¸ßºóµÈ´ı 35us ²ÉÑù£º
-    // ¸ßµçÆ½³ÖĞøÔ¼ 26~28us -> 0
-    // ¸ßµçÆ½³ÖĞøÔ¼ 70us    -> 1
-    DHT11_DelayUs(38);
+    // æ‹‰é«˜åç­‰å¾…ä¸€æ®µæ—¶é—´é‡‡æ ·ï¼š
+    // é«˜ç”µå¹³æŒç»­çº¦ 26~28us -> 0
+    // é«˜ç”µå¹³æŒç»­çº¦ 70us    -> 1
+    DHT11_DelayUs(DHT11_BIT_SAMPLE_US);
     *bit = DHT11_ReadPin();
 
-    // µÈ´ıÕâÎ»½áÊø£¬»Øµ½µÍµçÆ½
-    if (!DHT11_WaitLevel(0, 100)) return 0;
+    // ç­‰å¾…è¿™ä½ç»“æŸï¼Œå›åˆ°ä½ç”µå¹³
+    if (!DHT11_WaitLevel(0, DHT11_BIT_END_TIMEOUT_US)) return 0;
 
     return 1;
 }
 
-// ¶ÁÈ¡ 1byte
+// è¯»å– 1byte
 static uint8_t DHT11_ReadByte(uint8_t *data)
 {
     uint8_t i, bitVal;
@@ -113,47 +123,46 @@ static uint8_t DHT11_ReadByte(uint8_t *data)
     return 1;
 }
 
-// ===== Ö÷¶ÁÈ¡º¯Êı =====
-DHT11_Data_t DHT11_Read(void)
+static DHT11_Data_t DHT11_ReadOnce(void)
 {
     DHT11_Data_t result = {0, 0, 0, 0, 0};
     uint8_t hum_int, hum_dec, temp_int, temp_dec, checksum;
 
     __disable_irq();
 
-    // 1. ÆğÊ¼ĞÅºÅ£ºÖ÷»úÀ­µÍ >=18ms
+    // 1. èµ·å§‹ä¿¡å·ï¼šä¸»æœºæ‹‰ä½ >=18ms
     DHT11_PinMode_Output();
     DHT11_WriteLow();
-    DHT11_DelayMs(20);
+    DHT11_DelayMs(DHT11_START_LOW_MS);
 
-    // 2. Ö÷»úÀ­¸ß 20~40us ºóÇĞÊäÈë
+    // 2. ä¸»æœºæ‹‰é«˜ 20~40us ååˆ‡è¾“å…¥
     DHT11_WriteHigh();
-    DHT11_DelayUs(30);
+    DHT11_DelayUs(DHT11_RELEASE_US);
     DHT11_PinMode_Input();
 
-    // 3. µÈ´ı DHT11 ÏìÓ¦
+    // 3. ç­‰å¾… DHT11 å“åº”
     result.step = 1;
-if (!DHT11_WaitLevel(0, 500)) {
-    result.timeout = 1;
-    __enable_irq();
-    return result;
-}
+    if (!DHT11_WaitLevel(0, DHT11_RESPONSE_TIMEOUT_US)) {
+        result.timeout = 1;
+        __enable_irq();
+        return result;
+    }
 
-result.step = 2;
-if (!DHT11_WaitLevel(1, 500)) {
-    result.timeout = 1;
-    __enable_irq();
-    return result;
-}
+    result.step = 2;
+    if (!DHT11_WaitLevel(1, DHT11_RESPONSE_TIMEOUT_US)) {
+        result.timeout = 1;
+        __enable_irq();
+        return result;
+    }
 
-result.step = 3;
-if (!DHT11_WaitLevel(0, 500)) {
-    result.timeout = 1;
-    __enable_irq();
-    return result;
-}
+    result.step = 3;
+    if (!DHT11_WaitLevel(0, DHT11_RESPONSE_TIMEOUT_US)) {
+        result.timeout = 1;
+        __enable_irq();
+        return result;
+    }
 
-    // 4. ¶Á 5 ×Ö½Ú
+    // 4. è¯» 5 å­—èŠ‚
     result.step = 4;
     if (!DHT11_ReadByte(&hum_int)) {
         result.timeout = 1;
@@ -191,7 +200,7 @@ if (!DHT11_WaitLevel(0, 500)) {
 
     __enable_irq();
 
-    // 5. Ğ£Ñé
+    // 5. æ ¡éªŒ
     result.step = 9;
     if (((uint8_t)(hum_int + hum_dec + temp_int + temp_dec)) == checksum) {
         result.humidity = hum_int;
@@ -199,6 +208,21 @@ if (!DHT11_WaitLevel(0, 500)) {
         result.checksum_ok = 1;
     } else {
         result.checksum_ok = 0;
+    }
+
+    return result;
+}
+
+DHT11_Data_t DHT11_Read(void)
+{
+    DHT11_Data_t result = {0, 0, 0, 0, 0};
+
+    for (uint8_t attempt = 0; attempt < DHT11_RETRY_COUNT; attempt++) {
+        result = DHT11_ReadOnce();
+        if (!result.timeout) {
+            return result;
+        }
+        DHT11_DelayMs(DHT11_RETRY_GAP_MS);
     }
 
     return result;

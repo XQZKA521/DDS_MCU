@@ -4,12 +4,12 @@
   C:\Software\Keil_v5\ARM\ARMCLANG\include\stdint.h \
   C:\Software\Keil_v5\ARM\ARMCLANG\include\stdbool.h \
   ..\Source\third_party\CMSIS\Core\Include\core_cm0plus.h \
-  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\system_x\Source\third_party\CMSIS\Core\Include\cmsis_version.h \
-  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\system_x\Source\third_party\CMSIS\Core\Include\cmsis_compiler.h \
-  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\system_x\Source\third_party\CMSIS\Core\Include\cmsis_armclang.h \
+  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\music\Source\third_party\CMSIS\Core\Include\cmsis_version.h \
+  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\music\Source\third_party\CMSIS\Core\Include\cmsis_compiler.h \
+  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\music\Source\third_party\CMSIS\Core\Include\cmsis_armclang.h \
   C:\Software\Keil_v5\ARM\ARMCLANG\include\arm_compat.h \
   C:\Software\Keil_v5\ARM\ARMCLANG\include\arm_acle.h \
-  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\system_x\Source\third_party\CMSIS\Core\Include\mpu_armv7.h \
+  C:\ti\mspm0_sdk_2_08_00_03\myG3519code\music\Source\third_party\CMSIS\Core\Include\mpu_armv7.h \
   ..\Source\ti\devices\msp\peripherals\hw_adc12.h \
   ..\Source\ti\devices\msp\peripherals\hw_aesadv.h \
   ..\Source\ti\devices\msp\peripherals\hw_comp.h \

@@ -103,20 +103,10 @@ extern "C" {
 
 
 /* Defines for TIMER_0 */
-#define TIMER_0_INST                                                     (TIMG0)
-#define TIMER_0_INST_IRQHandler                                 TIMG0_IRQHandler
-#define TIMER_0_INST_INT_IRQN                                   (TIMG0_INT_IRQn)
-#define TIMER_0_INST_LOAD_VALUE                                            (19U)
-/* Defines for TIMER_1 */
-#define TIMER_1_INST                                                     (TIMA1)
-#define TIMER_1_INST_IRQHandler                                 TIMA1_IRQHandler
-#define TIMER_1_INST_INT_IRQN                                   (TIMA1_INT_IRQn)
-#define TIMER_1_INST_LOAD_VALUE                                            (15U)
-/* Defines for TIMER_2 */
-#define TIMER_2_INST                                                     (TIMA0)
-#define TIMER_2_INST_IRQHandler                                 TIMA0_IRQHandler
-#define TIMER_2_INST_INT_IRQN                                   (TIMA0_INT_IRQn)
-#define TIMER_2_INST_LOAD_VALUE                                            (30U)
+#define TIMER_0_INST                                                     (TIMA0)
+#define TIMER_0_INST_IRQHandler                                 TIMA0_IRQHandler
+#define TIMER_0_INST_INT_IRQN                                   (TIMA0_INT_IRQn)
+#define TIMER_0_INST_LOAD_VALUE                                           (249U)
 
 
 
@@ -264,8 +254,6 @@ void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_PWM_0_init(void);
 void SYSCFG_DL_TIMER_0_init(void);
-void SYSCFG_DL_TIMER_1_init(void);
-void SYSCFG_DL_TIMER_2_init(void);
 void SYSCFG_DL_UART_0_init(void);
 void SYSCFG_DL_UART_1_init(void);
 void SYSCFG_DL_ADC12_0_init(void);
