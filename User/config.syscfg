@@ -164,7 +164,7 @@ TIMER1.timerMode   = "PERIODIC";
 TIMER1.interrupts  = ["ZERO"];
 TIMER1.timerClkSrc = "MFCLK";
 TIMER1.timerClkDiv = 2;
-TIMER1.timerPeriod = "0.125 ms";
+TIMER1.timerPeriod = "0.03125 ms";
 
 TRNG.clockDivider = "DL_TRNG_CLOCK_DIVIDE_8";
 
