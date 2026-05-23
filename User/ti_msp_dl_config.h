@@ -123,25 +123,9 @@ extern "C" {
 #define GPIO_UART_0_IOMUX_TX                                     (IOMUX_PINCM21)
 #define GPIO_UART_0_IOMUX_RX_FUNC                      IOMUX_PINCM22_PF_UART0_RX
 #define GPIO_UART_0_IOMUX_TX_FUNC                      IOMUX_PINCM21_PF_UART0_TX
-#define UART_0_BAUD_RATE                                                (500000)
-#define UART_0_IBRD_40_MHZ_500000_BAUD                                       (5)
-#define UART_0_FBRD_40_MHZ_500000_BAUD                                       (0)
-/* Defines for UART_1 */
-#define UART_1_INST                                                        UART1
-#define UART_1_INST_FREQUENCY                                           40000000
-#define UART_1_INST_IRQHandler                                  UART1_IRQHandler
-#define UART_1_INST_INT_IRQN                                      UART1_INT_IRQn
-#define GPIO_UART_1_RX_PORT                                                GPIOA
-#define GPIO_UART_1_TX_PORT                                                GPIOA
-#define GPIO_UART_1_RX_PIN                                        DL_GPIO_PIN_18
-#define GPIO_UART_1_TX_PIN                                        DL_GPIO_PIN_17
-#define GPIO_UART_1_IOMUX_RX                                     (IOMUX_PINCM40)
-#define GPIO_UART_1_IOMUX_TX                                     (IOMUX_PINCM39)
-#define GPIO_UART_1_IOMUX_RX_FUNC                      IOMUX_PINCM40_PF_UART1_RX
-#define GPIO_UART_1_IOMUX_TX_FUNC                      IOMUX_PINCM39_PF_UART1_TX
-#define UART_1_BAUD_RATE                                                (115200)
-#define UART_1_IBRD_40_MHZ_115200_BAUD                                      (21)
-#define UART_1_FBRD_40_MHZ_115200_BAUD                                      (45)
+#define UART_0_BAUD_RATE                                                (115200)
+#define UART_0_IBRD_40_MHZ_115200_BAUD                                      (21)
+#define UART_0_FBRD_40_MHZ_115200_BAUD                                      (45)
 
 
 
@@ -255,7 +239,6 @@ void SYSCFG_DL_SYSCTL_init(void);
 void SYSCFG_DL_PWM_0_init(void);
 void SYSCFG_DL_TIMER_0_init(void);
 void SYSCFG_DL_UART_0_init(void);
-void SYSCFG_DL_UART_1_init(void);
 void SYSCFG_DL_ADC12_0_init(void);
 void SYSCFG_DL_DMA_init(void);
 

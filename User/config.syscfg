@@ -26,7 +26,6 @@ const TIMER1 = TIMER.addInstance();
 const TRNG   = scripting.addModule("/ti/driverlib/TRNG");
 const UART   = scripting.addModule("/ti/driverlib/UART", {}, false);
 const UART1  = UART.addInstance();
-const UART2  = UART.addInstance();
 
 /**
  * Write custom configuration values to the imported modules.
@@ -169,17 +168,12 @@ TIMER1.timerPeriod = "0.03125 ms";
 TRNG.clockDivider = "DL_TRNG_CLOCK_DIVIDE_8";
 
 UART1.$name                    = "UART_0";
-UART1.targetBaudRate           = 500000;
+UART1.targetBaudRate           = 115200;
 UART1.peripheral.$assign       = "UART0";
 UART1.peripheral.rxPin.$assign = "PA11";
 UART1.peripheral.txPin.$assign = "PA10";
 UART1.txPinConfig.$name        = "ti_driverlib_gpio_GPIOPinGeneric2";
 UART1.rxPinConfig.$name        = "ti_driverlib_gpio_GPIOPinGeneric3";
-
-UART2.$name             = "UART_1";
-UART2.targetBaudRate    = 115200;
-UART2.txPinConfig.$name = "ti_driverlib_gpio_GPIOPinGeneric4";
-UART2.rxPinConfig.$name = "ti_driverlib_gpio_GPIOPinGeneric5";
 
 const ProjectConfig              = scripting.addModule("/ti/project_config/ProjectConfig", {}, false);
 ProjectConfig.migrationCondition = true;
@@ -196,6 +190,3 @@ DMA.associatedChannels[0].peripheral.$suggestSolution = "DMA_CH0";
 PWM1.peripheral.$suggestSolution                      = "TIMG8";
 PWM1.peripheral.ccp1Pin.$suggestSolution              = "PA0";
 TIMER1.peripheral.$suggestSolution                    = "TIMA0";
-UART2.peripheral.$suggestSolution                     = "UART1";
-UART2.peripheral.rxPin.$suggestSolution               = "PA18";
-UART2.peripheral.txPin.$suggestSolution               = "PA17";
