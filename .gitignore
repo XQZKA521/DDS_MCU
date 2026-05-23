@@ -1,48 +1,32 @@
-# Keil
-*.uvoptx
+# Keil MDK build output
+Output/
+
+# Keil user-specific files
 *.uvguix.*
-*.bak
-*.tmp
-*.log
-*.dep
+*.uvoptx
 
-# Build output
-*.o
-*.axf
-*.hex
-*.bin
-*.map
-Objects/
-Listings/
-
-# VSCode
-.vscode/*
-
-# 系统
-.DS_Store
-Thumbs.db
-
-# clangd cache
-.cache/
-.clangd/
-
-# VS Code
-.vscode/
-
-# Keil build/intermediate
-Objects/
-Listings/
-*.axf
-*.map
-*.hex
-*.bin
+# Compiled objects
 *.o
 *.d
-
-# Keil user/temp
-*.uvoptx
-*.uvguix.*
-*.bak
+*.axf
+*.hex
+*.htm
+*.lnp
+*.map
 *.dep
-*.tmp
-*.log
+*.scvd
+
+# IDE
+.vs/
+.vscode/
+.cache/
+
+# Misc
+*.bat
+compile_commands.json
+compile_flags.txt
+
+# Windows
+Thumbs.db
+Desktop.ini
+*.swp
