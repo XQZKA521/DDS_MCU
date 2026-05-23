@@ -1,0 +1,32 @@
+# Keil MDK build output
+Output/
+
+# Keil user-specific files
+*.uvguix.*
+*.uvoptx
+
+# Compiled objects
+*.o
+*.d
+*.axf
+*.hex
+*.htm
+*.lnp
+*.map
+*.dep
+*.scvd
+
+# IDE
+.vs/
+.vscode/
+.cache/
+
+# Misc
+*.bat
+compile_commands.json
+compile_flags.txt
+
+# Windows
+Thumbs.db
+Desktop.ini
+*.swp
