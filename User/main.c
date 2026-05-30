@@ -1,14 +1,4 @@
-/* =========================================================================
- *  DDS 控制器 - MSPM0G3519
- *  通过串口以 6 字节定长帧协议向 FPGA 发送指令，OLED 显示状态，按键调节频率和波特率
- *
- *  按键说明：
- *    按键 1       → 进入频率输入模式，之后用数字键输入频率值
- *    按键 2       → 进入波特率输入模式，之后用数字键输入波特率值
- *    数字键 0~9   → 在输入模式下拼接数值
- *    = 键（key12）→ 确认输入
- *    - 键（key14）→ 清除已输入内容
- * ========================================================================= */
+
 #include "ti_msp_dl_config.h"
 #include "oled.h"
 #include "key.h"
@@ -17,15 +7,19 @@
 #include <stdint.h>
 #include <string.h>
 
-/* ----- DDS 协议地址定义 ----- */
-#define DDS_ADDR_FREQ_L     0x01    /* 频率低 16 位寄存器地址 */
-#define DDS_ADDR_FREQ_H     0x02    /* 频率高 16 位寄存器地址 */
+/* ----- DDS 寄存器地址定义 ----- */
+#define DDS_ADDR_FREQ_L     0x01    /* 频率低16位寄存器地址 */
+#define DDS_ADDR_FREQ_H     0x02    /* 频率高16位寄存器地址 */
 #define DDS_ADDR_MOD_TYPE   0x03    /* 调制类型寄存器地址 */
+#define DDS_ADDR_AMP        0x04    /* 幅度控制寄存器地址 */
 
 /* ----- DDS 调制类型 ----- */
 #define DDS_MOD_CW          0x00    /* 等幅波（纯正弦） */
 #define DDS_MOD_AM          0x01    /* 调幅 */
 #define DDS_MOD_FM          0x02    /* 调频 */
+
+/* ----- DDS 幅度默认值（0x8000 = 32768 = 满幅度 1.0 倍） ----- */
+#define DDS_AMP_DEFAULT     0x8000
 
 /* ----- 串口波特率（默认 921600，匹配 FPGA） ----- */
 #define UART_DEFAULT_BAUD   921600
@@ -37,7 +31,7 @@ static volatile uint8_t  gUartRxBuffer[UART_RX_BUF_SIZE];
 static volatile uint16_t gUartRxIndex = 0;
 
 /* ----- 当前频率（每次确认后更新） ----- */
-static volatile uint32_t gCurrentFreqHz = 1000;
+static volatile uint32_t gCurrentFreqHz = 2000;
 
 /* ----- 输入状态 -----
  *  MODE_IDLE    = 待机，等待按 1 或 2 进入输入模式
@@ -83,9 +77,9 @@ void DDS_SetFrequency(uint32_t freq_hz)
     uint16_t freq_low  = (uint16_t)(freq_hz & 0xFFFF);
     uint16_t freq_high = (uint16_t)((freq_hz >> 16) & 0xFFFF);
 
-    DDS_SendFrame(freq_low,  DDS_ADDR_FREQ_L);   /* 第一帧：频率低16位 */
-    DDS_SendFrame(freq_high, DDS_ADDR_FREQ_H);   /* 第二帧：频率高16位 */
-    DDS_SendFrame(DDS_MOD_CW, DDS_ADDR_MOD_TYPE);/* 第三帧：默认CW模式  */
+    DDS_SendFrame(freq_low,       DDS_ADDR_FREQ_L);   /* 帧1：频率低16位 */
+    DDS_SendFrame(freq_high,      DDS_ADDR_FREQ_H);   /* 帧2：频率高16位 */
+    DDS_SendFrame(DDS_AMP_DEFAULT, DDS_ADDR_AMP);      /* 帧3：满幅度      */
 
     gCurrentFreqHz = freq_hz;
 }
@@ -139,8 +133,8 @@ void UART_1_INST_IRQHandler(void)
     }
 }
 
-/*  设置两路串口统一波特率（运行时可调）
- *  公式：BaudRate = CLK / (16 * (IBRD + FBRD/64))
+/* 设置两路串口统一波特率（运行时可调）
+ * 公式：BaudRate = CLK / (16 * (IBRD + FBRD/64))
  */
 static void UART_SetBaudRate(uint32_t baud)
 {
@@ -149,7 +143,7 @@ static void UART_SetBaudRate(uint32_t baud)
     /* UART_0（接电脑） */
     uint32_t clk0 = UART_0_INST_FREQUENCY;
     ibrd = clk0 / (16 * baud);
-    fbrd = ((clk0 % (16 * baud)) * 64 + baud / 2) / baud;
+    fbrd = (((clk0 % (16 * baud)) * 64) + (8 * baud)) / (16 * baud);
     DL_UART_Main_disable(UART_0_INST);
     DL_UART_Main_setOversampling(UART_0_INST, DL_UART_OVERSAMPLING_RATE_16X);
     DL_UART_Main_setBaudRateDivisor(UART_0_INST, ibrd, fbrd);
@@ -158,7 +152,7 @@ static void UART_SetBaudRate(uint32_t baud)
     /* UART_1（接 FPGA） */
     uint32_t clk1 = UART_1_INST_FREQUENCY;
     ibrd = clk1 / (16 * baud);
-    fbrd = ((clk1 % (16 * baud)) * 64 + baud / 2) / baud;
+    fbrd = (((clk1 % (16 * baud)) * 64) + (8 * baud)) / (16 * baud);
     DL_UART_Main_disable(UART_1_INST);
     DL_UART_Main_setOversampling(UART_1_INST, DL_UART_OVERSAMPLING_RATE_16X);
     DL_UART_Main_setBaudRateDivisor(UART_1_INST, ibrd, fbrd);
@@ -266,7 +260,7 @@ int main(void)
                         }
                         /* 其他数字键在待机模式下无效 */
                     } else {
-                        /* 输入模式下，追加数字（防溢出：最多 10 位） */
+                        /* 输入模式下，追加数字（防溢出：最大 10 位） */
                         if (gInputValue <= 999999999) {
                             gInputValue = gInputValue * 10 + (uint32_t)key;
                         }
