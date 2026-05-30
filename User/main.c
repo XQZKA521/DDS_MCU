@@ -20,9 +20,15 @@
 /* ----- DDS 协议地址定义 ----- */
 #define DDS_ADDR_FREQ_L     0x01    /* 频率低 16 位寄存器地址 */
 #define DDS_ADDR_FREQ_H     0x02    /* 频率高 16 位寄存器地址 */
+#define DDS_ADDR_MOD_TYPE   0x03    /* 调制类型寄存器地址 */
 
-/* ----- 串口波特率（默认 500000） ----- */
-#define UART_DEFAULT_BAUD   115200
+/* ----- DDS 调制类型 ----- */
+#define DDS_MOD_CW          0x00    /* 等幅波（纯正弦） */
+#define DDS_MOD_AM          0x01    /* 调幅 */
+#define DDS_MOD_FM          0x02    /* 调频 */
+
+/* ----- 串口波特率（默认 921600，匹配 FPGA） ----- */
+#define UART_DEFAULT_BAUD   921600
 static volatile uint32_t gUartBaudRate = UART_DEFAULT_BAUD;
 
 /* ----- 串口接收缓冲区（预留，暂未使用） ----- */
@@ -48,9 +54,11 @@ static volatile uint32_t gInputValue  = 0;       /* 当前正在输入的数字 
  *  底层串口发送函数
  * ======================================================================== */
 
+/* 底层串口发送（两路同步发送） */
 static void UART_SendByte(uint8_t data)
 {
     DL_UART_Main_transmitDataBlocking(UART_0_INST, data);
+    DL_UART_Main_transmitDataBlocking(UART_1_INST, data);
 }
 
 /* ========================================================================
@@ -77,8 +85,14 @@ void DDS_SetFrequency(uint32_t freq_hz)
 
     DDS_SendFrame(freq_low,  DDS_ADDR_FREQ_L);   /* 第一帧：频率低16位 */
     DDS_SendFrame(freq_high, DDS_ADDR_FREQ_H);   /* 第二帧：频率高16位 */
+    DDS_SendFrame(DDS_MOD_CW, DDS_ADDR_MOD_TYPE);/* 第三帧：默认CW模式  */
 
     gCurrentFreqHz = freq_hz;
+}
+
+void DDS_SetModType(uint8_t mod_type)
+{
+    DDS_SendFrame((uint16_t)mod_type, DDS_ADDR_MOD_TYPE);
 }
 
 /* ========================================================================
@@ -105,20 +119,50 @@ void UART_0_INST_IRQHandler(void)
     }
 }
 
-/*  设置串口波特率（运行时可调）
+void UART_1_INST_IRQHandler(void)
+{
+    switch (DL_UART_Main_getPendingInterrupt(UART_1_INST)) {
+        case DL_UART_MAIN_IIDX_RX:
+        {
+            uint8_t ch = (uint8_t)DL_UART_Main_receiveData(UART_1_INST);
+            if (gUartRxIndex < (UART_RX_BUF_SIZE - 1)) {
+                gUartRxBuffer[gUartRxIndex++] = ch;
+                gUartRxBuffer[gUartRxIndex] = '\0';
+            } else {
+                gUartRxIndex = 0;
+                memset((void *)gUartRxBuffer, 0, UART_RX_BUF_SIZE);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+/*  设置两路串口统一波特率（运行时可调）
  *  公式：BaudRate = CLK / (16 * (IBRD + FBRD/64))
- *  CLK = UART_0_INST_FREQUENCY（40 MHz）
  */
 static void UART_SetBaudRate(uint32_t baud)
 {
-    uint32_t clk = UART_0_INST_FREQUENCY;
-    uint32_t ibrd = clk / (16 * baud);
-    uint32_t fbrd = ((clk % (16 * baud)) * 64 + baud / 2) / baud;
+    uint32_t ibrd, fbrd;
 
+    /* UART_0（接电脑） */
+    uint32_t clk0 = UART_0_INST_FREQUENCY;
+    ibrd = clk0 / (16 * baud);
+    fbrd = ((clk0 % (16 * baud)) * 64 + baud / 2) / baud;
     DL_UART_Main_disable(UART_0_INST);
     DL_UART_Main_setOversampling(UART_0_INST, DL_UART_OVERSAMPLING_RATE_16X);
     DL_UART_Main_setBaudRateDivisor(UART_0_INST, ibrd, fbrd);
     DL_UART_Main_enable(UART_0_INST);
+
+    /* UART_1（接 FPGA） */
+    uint32_t clk1 = UART_1_INST_FREQUENCY;
+    ibrd = clk1 / (16 * baud);
+    fbrd = ((clk1 % (16 * baud)) * 64 + baud / 2) / baud;
+    DL_UART_Main_disable(UART_1_INST);
+    DL_UART_Main_setOversampling(UART_1_INST, DL_UART_OVERSAMPLING_RATE_16X);
+    DL_UART_Main_setBaudRateDivisor(UART_1_INST, ibrd, fbrd);
+    DL_UART_Main_enable(UART_1_INST);
 
     gUartBaudRate = baud;
 }
@@ -126,9 +170,16 @@ static void UART_SetBaudRate(uint32_t baud)
 static void UART_Init(void)
 {
     UART_SetBaudRate(UART_DEFAULT_BAUD);
+
+    /* UART_0 中断配置（接电脑，可收数据） */
     NVIC_ClearPendingIRQ(UART_0_INST_INT_IRQN);
     DL_UART_Main_enableInterrupt(UART_0_INST, DL_UART_MAIN_INTERRUPT_RX);
     NVIC_EnableIRQ(UART_0_INST_INT_IRQN);
+
+    /* UART_1 中断配置（接 FPGA） */
+    NVIC_ClearPendingIRQ(UART_1_INST_INT_IRQN);
+    DL_UART_Main_enableInterrupt(UART_1_INST, DL_UART_MAIN_INTERRUPT_RX);
+    NVIC_EnableIRQ(UART_1_INST_INT_IRQN);
 }
 
 /* ========================================================================
