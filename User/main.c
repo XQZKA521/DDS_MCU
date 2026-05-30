@@ -1,4 +1,3 @@
-
 #include "ti_msp_dl_config.h"
 #include "oled.h"
 #include "key.h"
@@ -8,103 +7,119 @@
 #include <string.h>
 
 /* ----- DDS 寄存器地址定义 ----- */
-#define DDS_ADDR_FREQ_L     0x01    /* 频率低16位寄存器地址 */
-#define DDS_ADDR_FREQ_H     0x02    /* 频率高16位寄存器地址 */
-#define DDS_ADDR_MOD_TYPE   0x03    /* 调制类型寄存器地址 */
-#define DDS_ADDR_AMP        0x04    /* 幅度控制寄存器地址 */
+#define DDS_ADDR_FREQ_L        0x01
+#define DDS_ADDR_FREQ_H        0x02
+#define DDS_ADDR_MOD_TYPE      0x03
+#define DDS_ADDR_AM_DEPTH      0x04
+#define DDS_ADDR_MOD_FREQ_L    0x05
+#define DDS_ADDR_MOD_FREQ_H    0x06
 
 /* ----- DDS 调制类型 ----- */
-#define DDS_MOD_CW          0x00    /* 等幅波（纯正弦） */
-#define DDS_MOD_AM          0x01    /* 调幅 */
-#define DDS_MOD_FM          0x02    /* 调频 */
+#define DDS_MOD_CW             0x00
+#define DDS_MOD_AM             0x01
+#define DDS_MOD_FM             0x02
 
-/* ----- DDS 幅度默认值（0x8000 = 32768 = 满幅度 1.0 倍） ----- */
-#define DDS_AMP_DEFAULT     0x8000
+/* ----- AM 调制度寄存器换算 ----- */
+#define DDS_AM_DEPTH_FULL_SCALE 32768U
+
+/* ----- 频率范围约束 ----- */
+#define DDS_CARRIER_FREQ_MIN_HZ 1UL
+#define DDS_CARRIER_FREQ_MAX_HZ 10000000UL
+#define DDS_MOD_FREQ_MIN_HZ    1UL
+#define DDS_MOD_FREQ_MAX_HZ    1000000UL
 
 /* ----- 串口波特率（默认 921600，匹配 FPGA） ----- */
-#define UART_DEFAULT_BAUD   921600
-static volatile uint32_t gUartBaudRate = UART_DEFAULT_BAUD;
+#define UART_DEFAULT_BAUD      921600UL
 
 /* ----- 串口接收缓冲区（预留，暂未使用） ----- */
-#define UART_RX_BUF_SIZE    64
+#define UART_RX_BUF_SIZE       64U
+
+/* ----- 输入模式 ----- */
+#define MODE_IDLE              0U
+#define MODE_FREQ              1U
+#define MODE_MOD_FREQ          2U
+
 static volatile uint8_t  gUartRxBuffer[UART_RX_BUF_SIZE];
-static volatile uint16_t gUartRxIndex = 0;
+static volatile uint16_t gUartRxIndex = 0U;
 
-/* ----- 当前频率（每次确认后更新） ----- */
-static volatile uint32_t gCurrentFreqHz = 2000;
+static uint32_t gCarrierFreqHz    = 2000UL;
+static uint32_t gModFreqHz        = 1000UL;
+static uint8_t  gModType          = DDS_MOD_CW;
+static uint8_t  gAmDepthPercent   = 50U;
+static uint8_t  gInputMode        = MODE_IDLE;
+static uint32_t gInputValue       = 0UL;
 
-/* ----- 输入状态 -----
- *  MODE_IDLE    = 待机，等待按 1 或 2 进入输入模式
- *  MODE_FREQ    = 正在输入频率
- *  MODE_BAUD    = 正在输入波特率
- */
-#define MODE_IDLE   0
-#define MODE_FREQ   1
-#define MODE_BAUD   2
-static volatile uint8_t  gInputMode   = MODE_IDLE;
-static volatile uint32_t gInputValue  = 0;       /* 当前正在输入的数字 */
-
-/* ========================================================================
- *  底层串口发送函数
- * ======================================================================== */
-
-/* 底层串口发送（两路同步发送） */
 static void UART_SendByte(uint8_t data)
 {
     DL_UART_Main_transmitDataBlocking(UART_0_INST, data);
     DL_UART_Main_transmitDataBlocking(UART_1_INST, data);
 }
 
-/* ========================================================================
- *  DDS 帧发送函数
- *
- *  帧格式（6 字节）：
- *    [数据高8位][数据低8位][控制地址][0xFF][0xFF][0xFF]
- * ======================================================================== */
-
-void DDS_SendFrame(uint16_t data, uint8_t addr)
+/* 帧格式:
+ * [数据高8位][数据低8位][控制地址][0xFF][0xFF][0xFF]
+ */
+static void DDS_SendFrame(uint16_t data, uint8_t addr)
 {
-    UART_SendByte((uint8_t)(data >> 8));    /* 字节1：数据高8位 */
-    UART_SendByte((uint8_t)(data & 0xFF));  /* 字节2：数据低8位 */
-    UART_SendByte(addr);                     /* 字节3：控制地址   */
-    UART_SendByte(0xFF);                     /* 字节4：帧尾       */
-    UART_SendByte(0xFF);                     /* 字节5：帧尾       */
-    UART_SendByte(0xFF);                     /* 字节6：帧尾       */
+    UART_SendByte((uint8_t)(data >> 8));
+    UART_SendByte((uint8_t)(data & 0xFFU));
+    UART_SendByte(addr);
+    UART_SendByte(0xFFU);
+    UART_SendByte(0xFFU);
+    UART_SendByte(0xFFU);
 }
 
-void DDS_SetFrequency(uint32_t freq_hz)
+static uint16_t DDS_AmDepthPercentToReg(uint8_t depth_percent)
 {
-    uint16_t freq_low  = (uint16_t)(freq_hz & 0xFFFF);
-    uint16_t freq_high = (uint16_t)((freq_hz >> 16) & 0xFFFF);
-
-    DDS_SendFrame(freq_low,       DDS_ADDR_FREQ_L);   /* 帧1：频率低16位 */
-    DDS_SendFrame(freq_high,      DDS_ADDR_FREQ_H);   /* 帧2：频率高16位 */
-    DDS_SendFrame(DDS_AMP_DEFAULT, DDS_ADDR_AMP);      /* 帧3：满幅度      */
-
-    gCurrentFreqHz = freq_hz;
+    return (uint16_t)((((uint32_t) depth_percent) * DDS_AM_DEPTH_FULL_SCALE + 50U) / 100U);
 }
 
-void DDS_SetModType(uint8_t mod_type)
+static void DDS_SetCarrierFrequency(uint32_t freq_hz)
 {
-    DDS_SendFrame((uint16_t)mod_type, DDS_ADDR_MOD_TYPE);
+    DDS_SendFrame((uint16_t)(freq_hz & 0xFFFFU), DDS_ADDR_FREQ_L);
+    DDS_SendFrame((uint16_t)((freq_hz >> 16) & 0xFFFFU), DDS_ADDR_FREQ_H);
+    gCarrierFreqHz = freq_hz;
 }
 
-/* ========================================================================
- *  串口接收中断服务函数（预留功能，仅读取数据以清除中断标志）
- * ======================================================================== */
+static void DDS_SetModFrequency(uint32_t freq_hz)
+{
+    DDS_SendFrame((uint16_t)(freq_hz & 0xFFFFU), DDS_ADDR_MOD_FREQ_L);
+    DDS_SendFrame((uint16_t)((freq_hz >> 16) & 0xFFFFU), DDS_ADDR_MOD_FREQ_H);
+    gModFreqHz = freq_hz;
+}
+
+static void DDS_SetModType(uint8_t mod_type)
+{
+    DDS_SendFrame((uint16_t) mod_type, DDS_ADDR_MOD_TYPE);
+    gModType = mod_type;
+}
+
+static void DDS_SetAmDepthPercent(uint8_t depth_percent)
+{
+    DDS_SendFrame(DDS_AmDepthPercentToReg(depth_percent), DDS_ADDR_AM_DEPTH);
+    gAmDepthPercent = depth_percent;
+}
+
+static void DDS_ApplyStartupConfig(void)
+{
+    DDS_SetCarrierFrequency(gCarrierFreqHz);
+    DDS_SetModFrequency(gModFreqHz);
+    DDS_SetAmDepthPercent(gAmDepthPercent);
+    DDS_SetModType(gModType);
+}
 
 void UART_0_INST_IRQHandler(void)
 {
     switch (DL_UART_Main_getPendingInterrupt(UART_0_INST)) {
         case DL_UART_MAIN_IIDX_RX:
         {
-            uint8_t ch = (uint8_t)DL_UART_Main_receiveData(UART_0_INST);
-            if (gUartRxIndex < (UART_RX_BUF_SIZE - 1)) {
+            uint8_t ch = (uint8_t) DL_UART_Main_receiveData(UART_0_INST);
+
+            if (gUartRxIndex < (UART_RX_BUF_SIZE - 1U)) {
                 gUartRxBuffer[gUartRxIndex++] = ch;
                 gUartRxBuffer[gUartRxIndex] = '\0';
             } else {
-                gUartRxIndex = 0;
-                memset((void *)gUartRxBuffer, 0, UART_RX_BUF_SIZE);
+                gUartRxIndex = 0U;
+                memset((void *) gUartRxBuffer, 0, UART_RX_BUF_SIZE);
             }
             break;
         }
@@ -118,13 +133,14 @@ void UART_1_INST_IRQHandler(void)
     switch (DL_UART_Main_getPendingInterrupt(UART_1_INST)) {
         case DL_UART_MAIN_IIDX_RX:
         {
-            uint8_t ch = (uint8_t)DL_UART_Main_receiveData(UART_1_INST);
-            if (gUartRxIndex < (UART_RX_BUF_SIZE - 1)) {
+            uint8_t ch = (uint8_t) DL_UART_Main_receiveData(UART_1_INST);
+
+            if (gUartRxIndex < (UART_RX_BUF_SIZE - 1U)) {
                 gUartRxBuffer[gUartRxIndex++] = ch;
                 gUartRxBuffer[gUartRxIndex] = '\0';
             } else {
-                gUartRxIndex = 0;
-                memset((void *)gUartRxBuffer, 0, UART_RX_BUF_SIZE);
+                gUartRxIndex = 0U;
+                memset((void *) gUartRxBuffer, 0, UART_RX_BUF_SIZE);
             }
             break;
         }
@@ -133,168 +149,199 @@ void UART_1_INST_IRQHandler(void)
     }
 }
 
-/* 设置两路串口统一波特率（运行时可调）
- * 公式：BaudRate = CLK / (16 * (IBRD + FBRD/64))
- */
+/* 公式: BaudRate = CLK / (16 * (IBRD + FBRD/64)) */
 static void UART_SetBaudRate(uint32_t baud)
 {
-    uint32_t ibrd, fbrd;
-
-    /* UART_0（接电脑） */
     uint32_t clk0 = UART_0_INST_FREQUENCY;
-    ibrd = clk0 / (16 * baud);
-    fbrd = (((clk0 % (16 * baud)) * 64) + (8 * baud)) / (16 * baud);
+    uint32_t clk1 = UART_1_INST_FREQUENCY;
+    uint32_t ibrd;
+    uint32_t fbrd;
+
+    ibrd = clk0 / (16U * baud);
+    fbrd = (((clk0 % (16U * baud)) * 64U) + (8U * baud)) / (16U * baud);
     DL_UART_Main_disable(UART_0_INST);
     DL_UART_Main_setOversampling(UART_0_INST, DL_UART_OVERSAMPLING_RATE_16X);
     DL_UART_Main_setBaudRateDivisor(UART_0_INST, ibrd, fbrd);
     DL_UART_Main_enable(UART_0_INST);
 
-    /* UART_1（接 FPGA） */
-    uint32_t clk1 = UART_1_INST_FREQUENCY;
-    ibrd = clk1 / (16 * baud);
-    fbrd = (((clk1 % (16 * baud)) * 64) + (8 * baud)) / (16 * baud);
+    ibrd = clk1 / (16U * baud);
+    fbrd = (((clk1 % (16U * baud)) * 64U) + (8U * baud)) / (16U * baud);
     DL_UART_Main_disable(UART_1_INST);
     DL_UART_Main_setOversampling(UART_1_INST, DL_UART_OVERSAMPLING_RATE_16X);
     DL_UART_Main_setBaudRateDivisor(UART_1_INST, ibrd, fbrd);
     DL_UART_Main_enable(UART_1_INST);
 
-    gUartBaudRate = baud;
 }
 
 static void UART_Init(void)
 {
     UART_SetBaudRate(UART_DEFAULT_BAUD);
 
-    /* UART_0 中断配置（接电脑，可收数据） */
     NVIC_ClearPendingIRQ(UART_0_INST_INT_IRQN);
     DL_UART_Main_enableInterrupt(UART_0_INST, DL_UART_MAIN_INTERRUPT_RX);
     NVIC_EnableIRQ(UART_0_INST_INT_IRQN);
 
-    /* UART_1 中断配置（接 FPGA） */
     NVIC_ClearPendingIRQ(UART_1_INST_INT_IRQN);
     DL_UART_Main_enableInterrupt(UART_1_INST, DL_UART_MAIN_INTERRUPT_RX);
     NVIC_EnableIRQ(UART_1_INST_INT_IRQN);
 }
 
-/* ========================================================================
- *  OLED 显示函数
- * ======================================================================== */
+static uint8_t IsCarrierFrequencyValid(uint32_t freq_hz)
+{
+    return (freq_hz >= DDS_CARRIER_FREQ_MIN_HZ) && (freq_hz <= DDS_CARRIER_FREQ_MAX_HZ);
+}
+
+static uint8_t IsModFrequencyValid(uint32_t freq_hz)
+{
+    return (freq_hz >= DDS_MOD_FREQ_MIN_HZ) && (freq_hz <= DDS_MOD_FREQ_MAX_HZ);
+}
+
+static void EnterInputMode(uint8_t mode)
+{
+    gInputMode = mode;
+    gInputValue = 0UL;
+}
+
+static void StepAmDepth(int8_t step)
+{
+    int16_t next_depth = (int16_t) gAmDepthPercent + step;
+
+    if (next_depth < 10) {
+        next_depth = 10;
+    } else if (next_depth > 100) {
+        next_depth = 100;
+    }
+
+    DDS_SetAmDepthPercent((uint8_t) next_depth);
+}
+
+static void ToggleAmMode(void)
+{
+    if (gModType == DDS_MOD_AM) {
+        DDS_SetModType(DDS_MOD_CW);
+    } else {
+        DDS_SetModType(DDS_MOD_AM);
+    }
+}
+
+static void ConfirmInputValue(void)
+{
+    if (gInputMode == MODE_FREQ) {
+        if (IsCarrierFrequencyValid(gInputValue)) {
+            DDS_SetCarrierFrequency(gInputValue);
+            gInputMode = MODE_IDLE;
+            gInputValue = 0UL;
+        }
+    } else if (gInputMode == MODE_MOD_FREQ) {
+        if (IsModFrequencyValid(gInputValue)) {
+            DDS_SetModFrequency(gInputValue);
+            gInputMode = MODE_IDLE;
+            gInputValue = 0UL;
+        }
+    }
+}
+
+static void Display_IdleScreen(void)
+{
+    OLED_ShowString(0, 0, (u8 *) "1:Fc 2:Fm 3:AM");
+
+    OLED_ShowString(0, 2, (u8 *) "Fc:");
+    OLED_ShowNum(24, 2, (u32) gCarrierFreqHz, 8, 16);
+    OLED_ShowString(96, 2, (u8 *) "Hz");
+
+    OLED_ShowString(0, 4, (u8 *) "Fm:");
+    OLED_ShowNum(24, 4, (u32) gModFreqHz, 7, 16);
+    OLED_ShowString(88, 4, (u8 *) "Hz");
+
+    if (gModType == DDS_MOD_AM) {
+        OLED_ShowString(0, 6, (u8 *) "AM:ON ");
+    } else {
+        OLED_ShowString(0, 6, (u8 *) "AM:CW ");
+    }
+    OLED_ShowNum(48, 6, (u32) gAmDepthPercent, 3, 16);
+    OLED_ShowString(72, 6, (u8 *) "% +/-");
+}
+
+static void Display_InputScreen(void)
+{
+    if (gInputMode == MODE_FREQ) {
+        OLED_ShowString(0, 0, (u8 *) "Input Fc (Hz)  ");
+        OLED_ShowString(0, 4, (u8 *) "1Hz-10MHz      ");
+    } else {
+        OLED_ShowString(0, 0, (u8 *) "Input Fm (Hz)  ");
+        OLED_ShowString(0, 4, (u8 *) "Range:1-1MHz   ");
+    }
+
+    OLED_ShowString(0, 2, (u8 *) ">");
+    OLED_ShowNum(8, 2, (u32) gInputValue, 10, 16);
+    OLED_ShowString(0, 6, (u8 *) "=OK /CLR *ESC  ");
+}
 
 static void Display_Status(void)
 {
-    /* 第0行：当前模式提示 */
-    switch (gInputMode) {
-        case MODE_IDLE:
-            OLED_ShowString(0, 0, (u8 *)"1:Freq 2:Baud  ");
-            break;
-        case MODE_FREQ:
-            OLED_ShowString(0, 0, (u8 *)"Input Freq:    ");
-            break;
-        case MODE_BAUD:
-            OLED_ShowString(0, 0, (u8 *)"Input Baud:    ");
-            break;
-    }
+    OLED_Clear();
 
-    /* 第2行：输入中的数字 或 当前频率 */
-    if (gInputMode != MODE_IDLE) {
-        /* 输入模式：显示正在输入的数字 */
-        OLED_ShowString(0, 2, (u8 *)">");
-        OLED_ShowNum(8, 2, (u32)gInputValue, 10, 16);
-    } else {
-        /* 待机模式：显示当前生效的频率 */
-        OLED_ShowString(0, 2, (u8 *)"Freq:");
-        OLED_ShowNum(40, 2, (u32)gCurrentFreqHz, 10, 16);
-    }
-
-    /* 第4行：Hz（待机时显示） */
     if (gInputMode == MODE_IDLE) {
-        OLED_ShowString(0, 4, (u8 *)"Hz             ");
+        Display_IdleScreen();
     } else {
-        OLED_ShowString(0, 4, (u8 *)"=OK  -=CLR     ");
+        Display_InputScreen();
     }
-
-    /* 第6行：当前波特率 */
-    OLED_ShowString(0, 6, (u8 *)"Baud:");
-    OLED_ShowNum(40, 6, (u32)gUartBaudRate, 7, 16);
 }
-
-/* ========================================================================
- *  主函数
- * ======================================================================== */
 
 int main(void)
 {
-    /* --- 硬件初始化 --- */
     SYSCFG_DL_init();
     OLED_Init();
     OLED_Clear();
     UART_Init();
 
-    /* --- 开机画面 --- */
-    OLED_ShowString(20, 2, (u8 *)"DDS Starting...");
+    OLED_ShowString(20, 2, (u8 *) "DDS Starting...");
     delay_ms(1000);
-    OLED_Clear();
 
-    /* --- 发送初始频率并显示 --- */
-    DDS_SetFrequency(gCurrentFreqHz);
+    DDS_ApplyStartupConfig();
     Display_Status();
 
-    /* --- 主循环 --- */
     while (1) {
         int key = getKeyValue();
 
-        if (key != 20) {                        /* 20 = 无按键按下 */
-            delay_ms(10);
-            if (getKeyValue() == key) {         /* 消抖确认 */
+        if (key == KEY_NONE) {
+            continue;
+        }
 
-                /* ---------- 数字键 0~9：拼接输入 ---------- */
-                if (key >= 0 && key <= 9) {
-                    /* 按键 1 在待机时进入频率模式，按键 2 进入波特率模式 */
-                    if (gInputMode == MODE_IDLE) {
-                        if (key == 1) {
-                            gInputMode  = MODE_FREQ;
-                            gInputValue = 0;
-                        } else if (key == 2) {
-                            gInputMode  = MODE_BAUD;
-                            gInputValue = 0;
-                        }
-                        /* 其他数字键在待机模式下无效 */
-                    } else {
-                        /* 输入模式下，追加数字（防溢出：最大 10 位） */
-                        if (gInputValue <= 999999999) {
-                            gInputValue = gInputValue * 10 + (uint32_t)key;
-                        }
-                    }
-                    OLED_Clear();
-                }
-                /* ---------- = 键（key12）：确认输入 ---------- */
-                else if (key == 12) {
-                    if (gInputMode == MODE_FREQ) {
-                        DDS_SetFrequency(gInputValue);
-                    } else if (gInputMode == MODE_BAUD) {
-                        if (gInputValue >= 300 && gInputValue <= 921600) {
-                            UART_SetBaudRate(gInputValue);
-                        }
-                    }
-                    gInputMode  = MODE_IDLE;
-                    gInputValue = 0;
-                    OLED_Clear();
-                }
-                /* ---------- - 键（key14）：清除输入 ---------- */
-                else if (key == 14) {
-                    gInputValue = 0;
-                    OLED_Clear();
-                }
+        delay_ms(10);
+        if (getKeyValue() != key) {
+            continue;
+        }
 
-                Display_Status();
-
-                /* 等待按键松开 */
-                while (getKeyValue() != 20)
-                    ;
-                delay_ms(10);
+        if ((key >= KEY_DIGIT_0) && (key <= KEY_DIGIT_9)) {
+            if (gInputMode == MODE_IDLE) {
+                if (key == KEY_DIGIT_1) {
+                    EnterInputMode(MODE_FREQ);
+                } else if (key == KEY_DIGIT_2) {
+                    EnterInputMode(MODE_MOD_FREQ);
+                } else if (key == KEY_DIGIT_3) {
+                    ToggleAmMode();
+                }
+            } else if (gInputValue <= 429496728UL) {
+                gInputValue = gInputValue * 10UL + (uint32_t) key;
             }
+        } else if (key == KEY_EQUAL) {
+            ConfirmInputValue();
+        } else if ((key == KEY_CHU) && (gInputMode != MODE_IDLE)) {
+            gInputValue = 0UL;
+        } else if ((key == KEY_CHENG) && (gInputMode != MODE_IDLE)) {
+            gInputMode = MODE_IDLE;
+            gInputValue = 0UL;
+        } else if ((key == KEY_PLUS) && (gInputMode == MODE_IDLE)) {
+            StepAmDepth(10);
+        } else if ((key == KEY_MINUS) && (gInputMode == MODE_IDLE)) {
+            StepAmDepth(-10);
         }
 
         Display_Status();
+
+        while (getKeyValue() != KEY_NONE) {
+        }
+        delay_ms(10);
     }
 }
