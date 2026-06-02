@@ -1,7 +1,7 @@
-﻿[
+[
   {
-    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
-    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/User/main.c",
+    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
+    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/User/main.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -21,8 +21,8 @@
     ]
   },
   {
-    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
-    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/User/ti_msp_dl_config.c",
+    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
+    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/User/ti_msp_dl_config.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -42,8 +42,29 @@
     ]
   },
   {
-    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
-    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/Project/key.c",
+    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
+    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/Project/DHT11.c",
+    "arguments": [
+      "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
+      "--target=arm-arm-none-eabi",
+      "-mcpu=cortex-m0plus",
+      "-std=c99",
+      "-D__MSPM0G3519__",
+      "-I.",
+      "-IProject",
+      "-IUser",
+      "-IBSP",
+      "-IBSP/delay",
+      "-ISource",
+      "-ISource/third_party/CMSIS/Core/Include",
+      "-IC:/Software/Keil_v5/ARM/ARMCLANG/include",
+      "-c",
+      "Project/DHT11.c"
+    ]
+  },
+  {
+    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
+    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/Project/key.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -63,8 +84,8 @@
     ]
   },
   {
-    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
-    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/Project/oled.c",
+    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
+    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/Project/oled.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -84,8 +105,8 @@
     ]
   },
   {
-    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x",
-    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/system_x/Project/DHT11.c",
+    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
+    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/BSP/delay/delay.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -101,7 +122,7 @@
       "-ISource/third_party/CMSIS/Core/Include",
       "-IC:/Software/Keil_v5/ARM/ARMCLANG/include",
       "-c",
-      "Project/DHT11.c"
+      "BSP/delay/delay.c"
     ]
   }
 ]
