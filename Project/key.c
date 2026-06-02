@@ -1,27 +1,18 @@
 #include "key.h"
 
-/* 特殊键值定义 */
-#define KEY_PLUS   11   /* 加号键 */
-#define KEY_MINUS  12   /* 减号键 */
-#define KEY_cheng  13   /* 乘号键 */
-#define KEY_chu    14   /* 除号键 */
-#define KEY_equal  30   /* 等号键 */
-#define KEY_negate 40   /* 取反键 */
-#define KEY_point       /* 小数点键 */
-
 /* 行引脚和列引脚数组 */
 int h_arr[4] = {KEY_H1_PIN, KEY_H2_PIN, KEY_H3_PIN, KEY_H4_PIN};
 int v_arr[4] = {KEY_V1_PIN, KEY_V2_PIN, KEY_V3_PIN, KEY_V4_PIN};
 
 /* 获取矩阵键盘键值
- * 返回值: 0~9 = 数字键, 11~16 = 功能键, 20 = 无按键按下
+ * 返回值: 0~9 = 数字键, 11~14/30/40 = 功能键, 20 = 无按键按下
  */
 int getKeyValue(void)
 {
     int h_arr[4] = {KEY_H1_PIN, KEY_H2_PIN, KEY_H3_PIN, KEY_H4_PIN};
     int v_arr[4] = {KEY_V1_PIN, KEY_V2_PIN, KEY_V3_PIN, KEY_V4_PIN};
     int i, j = 0;
-    int key_value = 20;  /* 默认值 20 表示无按键按下 */
+    int key_value = KEY_NONE;  /* 默认值 20 表示无按键按下 */
 
     /* 逐行扫描 */
     for (i = 0; i < 4; i++)
@@ -63,10 +54,10 @@ int getKeyValue(void)
 
     else if(key_value == 13) {key_value = KEY_PLUS;}   /* 加号 */
     else if(key_value == 14) {key_value = KEY_MINUS;}  /* 减号 */
-    else if(key_value == 15) {key_value = KEY_cheng;}  /* 乘号 */
-    else if(key_value == 16) {key_value = KEY_chu;}    /* 除号 */
-    else if(key_value == 12) {key_value = KEY_equal;}  /* 等号 */
-    else if(key_value == 4)  {key_value = KEY_negate;} /* 取反 */
+    else if(key_value == 15) {key_value = KEY_CHENG;}  /* 乘号 */
+    else if(key_value == 16) {key_value = KEY_CHU;}    /* 除号 */
+    else if(key_value == 12) {key_value = KEY_EQUAL;}  /* 等号 */
+    else if(key_value == 4)  {key_value = KEY_NEGATE;} /* 取反 */
 
 
     return key_value; // 无按键按下返回 20
