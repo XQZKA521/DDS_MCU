@@ -1,448 +1,204 @@
-/*
-1 进正弦波模式，2 进 AM 模式，3 进 FM 模式
-
-SIN 模式：4 设置载波频率
-AM 模式：4 设置载波，5 设置调制频率，+/- 调 AM 深度
-FM 模式：4 设置载波，5 设置调制频率，6 设置频偏，+ 选 10k 上限，- 选 5k 上限
-
-输入时：= 确认，/ 清零，* 退出输入
-
-*/
-#include "ti_msp_dl_config.h"
-#include "oled.h"
-#include "key.h"
+#include "bsp.h"
 #include "delay.h"
+#include "key.h"
+#include "oled.h"
 
-#include <stdint.h>
-#include <string.h>
-
-/* ----- DDS register map ----- */
-#define DDS_ADDR_FREQ_L         0x01
-#define DDS_ADDR_FREQ_H         0x02
-#define DDS_ADDR_MOD_TYPE       0x03
-#define DDS_ADDR_AM_DEPTH       0x04
-#define DDS_ADDR_MOD_FREQ_L     0x05
-#define DDS_ADDR_MOD_FREQ_H     0x06
-#define DDS_ADDR_FM_DEV         0x07
-
-/* ----- DDS modulation types ----- */
-#define DDS_MOD_CW              0x00
-#define DDS_MOD_AM              0x01
-#define DDS_MOD_FM              0x02
-
-/* ----- AM depth register scaling ----- */
-#define DDS_AM_DEPTH_FULL_SCALE 32768U
-
-/* ----- Frequency limits ----- */
-#define DDS_CARRIER_FREQ_MIN_HZ    1UL
-#define DDS_CARRIER_FREQ_MAX_HZ    10000000UL
-#define DDS_FM_CARRIER_FREQ_MIN_HZ 100000UL
-#define DDS_MOD_FREQ_MIN_HZ        1UL
-#define DDS_MOD_FREQ_MAX_HZ        1000000UL
-
-/* ----- FM deviation limits ----- */
-#define DDS_FM_DEV_LIMIT_5K_HZ  5000U
-#define DDS_FM_DEV_LIMIT_10K_HZ 10000U
-
-/* ----- UART baud rate (default 921600, matched with FPGA) ----- */
-#define UART_DEFAULT_BAUD       921600UL
-
-/* ----- UART RX buffer (reserved) ----- */
-#define UART_RX_BUF_SIZE        64U
-
-/* ----- UI mode ----- */
-#define UI_MODE_SINE            0U
-#define UI_MODE_AM              1U
-#define UI_MODE_FM              2U
-
-/* ----- Numeric input target ----- */
-#define INPUT_NONE              0U
-#define INPUT_SINE_FREQ         1U
-#define INPUT_AM_CARRIER        2U
-#define INPUT_AM_MOD_FREQ       3U
-#define INPUT_FM_CARRIER        4U
-#define INPUT_FM_MOD_FREQ       5U
-#define INPUT_FM_DEV            6U
-
-static volatile uint8_t  gUartRxBuffer[UART_RX_BUF_SIZE];
-static volatile uint16_t gUartRxIndex = 0U;
-
-static uint8_t  gUiMode          = UI_MODE_SINE;
-static uint8_t  gInputMode       = INPUT_NONE;
-static uint32_t gInputValue      = 0UL;
-
-static uint32_t gSineCarrierHz   = 2000UL;
-static uint32_t gAmCarrierHz     = 2000UL;
-static uint32_t gAmModFreqHz     = 1000UL;
-static uint8_t  gAmDepthPercent  = 50U;
-static uint32_t gFmCarrierHz     = 100000UL;
-static uint32_t gFmModFreqHz     = 1000UL;
-static uint16_t gFmDevHz         = DDS_FM_DEV_LIMIT_5K_HZ;
-static uint16_t gFmDevLimitHz    = DDS_FM_DEV_LIMIT_5K_HZ;
-
-static void UART_SendByte(uint8_t data)
-{
-    DL_UART_Main_transmitDataBlocking(UART_0_INST, data);
-    DL_UART_Main_transmitDataBlocking(UART_1_INST, data);
-}
-
-/* Frame format:
- * [data_hi][data_lo][addr][0xFF][0xFF][0xFF]
+#define SERVO_MIN_ANGLE_DEG      0U
+#define SERVO_MAX_ANGLE_DEG      90U
+#define SERVO_DEFAULT_ANGLE_DEG  45U
+/*
+ * MG946R 官方页面给出了供电/扭矩等规格，但没有公开控制脉宽范围。
+ * 这里先采用更保守的标准舵机测试范围 1000us~2000us，避免直接顶到机械极限。
+ * 如果实测仍有偏差，可继续微调为 900/2100 或者缩小范围。
  */
-static void DDS_SendFrame(uint16_t data, uint8_t addr)
+#define SERVO_MIN_PULSE_US       1000U
+#define SERVO_MAX_PULSE_US       2000U
+
+#define STEP_MIN_DEG             1U
+#define STEP_MAX_DEG             90U
+#define STEP_DEFAULT_DEG         5U
+
+#define INPUT_NONE               0xFFFFU
+
+static uint16_t servo_angle = SERVO_DEFAULT_ANGLE_DEG;
+static uint16_t servo_step = STEP_DEFAULT_DEG;
+static uint16_t input_value = INPUT_NONE;
+
+static uint16_t clamp_u16(uint16_t value, uint16_t min_value, uint16_t max_value)
 {
-    UART_SendByte((uint8_t)(data >> 8));
-    UART_SendByte((uint8_t)(data & 0xFFU));
-    UART_SendByte(addr);
-    UART_SendByte(0xFFU);
-    UART_SendByte(0xFFU);
-    UART_SendByte(0xFFU);
+    if (value < min_value) {
+        return min_value;
+    }
+    if (value > max_value) {
+        return max_value;
+    }
+    return value;
 }
 
-static uint16_t DDS_AmDepthPercentToReg(uint8_t depth_percent)
+static uint16_t servo_angle_to_pulse_us(uint16_t angle_deg)
 {
-    return (uint16_t)((((uint32_t) depth_percent) * DDS_AM_DEPTH_FULL_SCALE + 50U) / 100U);
+    uint32_t span = (uint32_t) (SERVO_MAX_PULSE_US - SERVO_MIN_PULSE_US);
+
+    return (uint16_t) (SERVO_MIN_PULSE_US +
+        ((uint32_t) angle_deg * span) / SERVO_MAX_ANGLE_DEG);
 }
 
-static void DDS_SetCarrierFrequency(uint32_t freq_hz)
+static void servo_apply_angle(uint16_t angle_deg)
 {
-    DDS_SendFrame((uint16_t)(freq_hz & 0xFFFFU), DDS_ADDR_FREQ_L);
-    DDS_SendFrame((uint16_t)((freq_hz >> 16) & 0xFFFFU), DDS_ADDR_FREQ_H);
+    uint16_t pulse_us;
+
+    servo_angle = clamp_u16(angle_deg, SERVO_MIN_ANGLE_DEG, SERVO_MAX_ANGLE_DEG);
+    pulse_us = servo_angle_to_pulse_us(servo_angle);
+    DL_TimerG_setCaptureCompareValue(
+        SERVO_PWM_INST, pulse_us, GPIO_SERVO_PWM_C0_IDX);
 }
 
-static void DDS_SetModFrequency(uint32_t freq_hz)
+static void servo_init(void)
 {
-    DDS_SendFrame((uint16_t)(freq_hz & 0xFFFFU), DDS_ADDR_MOD_FREQ_L);
-    DDS_SendFrame((uint16_t)((freq_hz >> 16) & 0xFFFFU), DDS_ADDR_MOD_FREQ_H);
+    servo_apply_angle(SERVO_DEFAULT_ANGLE_DEG);
+    DL_TimerG_startCounter(SERVO_PWM_INST);
 }
 
-static void DDS_SetModType(uint8_t mod_type)
+static void input_append_digit(uint8_t digit)
 {
-    DDS_SendFrame((uint16_t) mod_type, DDS_ADDR_MOD_TYPE);
-}
+    if (digit > 9U) {
+        return;
+    }
 
-static void DDS_SetAmDepthPercent(uint8_t depth_percent)
-{
-    DDS_SendFrame(DDS_AmDepthPercentToReg(depth_percent), DDS_ADDR_AM_DEPTH);
-}
+    if (input_value == INPUT_NONE) {
+        input_value = digit;
+        return;
+    }
 
-static void DDS_SetFmDeviation(uint16_t deviation_hz)
-{
-    DDS_SendFrame(deviation_hz, DDS_ADDR_FM_DEV);
-}
-
-void UART_0_INST_IRQHandler(void)
-{
-    switch (DL_UART_Main_getPendingInterrupt(UART_0_INST)) {
-        case DL_UART_MAIN_IIDX_RX:
-        {
-            uint8_t ch = (uint8_t) DL_UART_Main_receiveData(UART_0_INST);
-
-            if (gUartRxIndex < (UART_RX_BUF_SIZE - 1U)) {
-                gUartRxBuffer[gUartRxIndex++] = ch;
-                gUartRxBuffer[gUartRxIndex] = '\0';
-            } else {
-                gUartRxIndex = 0U;
-                memset((void *) gUartRxBuffer, 0, UART_RX_BUF_SIZE);
-            }
-            break;
-        }
-        default:
-            break;
+    input_value = (uint16_t) (input_value * 10U + digit);
+    if (input_value > 999U) {
+        input_value = 999U;
     }
 }
 
-void UART_1_INST_IRQHandler(void)
+static void input_clear(void)
 {
-    switch (DL_UART_Main_getPendingInterrupt(UART_1_INST)) {
-        case DL_UART_MAIN_IIDX_RX:
-        {
-            uint8_t ch = (uint8_t) DL_UART_Main_receiveData(UART_1_INST);
+    input_value = INPUT_NONE;
+}
 
-            if (gUartRxIndex < (UART_RX_BUF_SIZE - 1U)) {
-                gUartRxBuffer[gUartRxIndex++] = ch;
-                gUartRxBuffer[gUartRxIndex] = '\0';
-            } else {
-                gUartRxIndex = 0U;
-                memset((void *) gUartRxBuffer, 0, UART_RX_BUF_SIZE);
-            }
-            break;
-        }
-        default:
-            break;
+static uint16_t input_or_default(uint16_t default_value)
+{
+    if (input_value == INPUT_NONE) {
+        return default_value;
     }
+    return input_value;
 }
 
-/* Formula: BaudRate = CLK / (16 * (IBRD + FBRD / 64)) */
-static void UART_SetBaudRate(uint32_t baud)
+static void oled_show_fixed3(uint8_t x, uint8_t y, uint16_t value)
 {
-    uint32_t clk0 = UART_0_INST_FREQUENCY;
-    uint32_t clk1 = UART_1_INST_FREQUENCY;
-    uint32_t ibrd;
-    uint32_t fbrd;
-
-    ibrd = clk0 / (16U * baud);
-    fbrd = (((clk0 % (16U * baud)) * 64U) + (8U * baud)) / (16U * baud);
-    DL_UART_Main_disable(UART_0_INST);
-    DL_UART_Main_setOversampling(UART_0_INST, DL_UART_OVERSAMPLING_RATE_16X);
-    DL_UART_Main_setBaudRateDivisor(UART_0_INST, ibrd, fbrd);
-    DL_UART_Main_enable(UART_0_INST);
-
-    ibrd = clk1 / (16U * baud);
-    fbrd = (((clk1 % (16U * baud)) * 64U) + (8U * baud)) / (16U * baud);
-    DL_UART_Main_disable(UART_1_INST);
-    DL_UART_Main_setOversampling(UART_1_INST, DL_UART_OVERSAMPLING_RATE_16X);
-    DL_UART_Main_setBaudRateDivisor(UART_1_INST, ibrd, fbrd);
-    DL_UART_Main_enable(UART_1_INST);
+    OLED_ShowChar(x, y, (value / 100U) % 10U + '0');
+    OLED_ShowChar(x + 8U, y, (value / 10U) % 10U + '0');
+    OLED_ShowChar(x + 16U, y, value % 10U + '0');
 }
 
-static void UART_Init(void)
+static void oled_show_input(uint8_t x, uint8_t y, uint16_t value)
 {
-    UART_SetBaudRate(UART_DEFAULT_BAUD);
-
-    NVIC_ClearPendingIRQ(UART_0_INST_INT_IRQN);
-    DL_UART_Main_enableInterrupt(UART_0_INST, DL_UART_MAIN_INTERRUPT_RX);
-    NVIC_EnableIRQ(UART_0_INST_INT_IRQN);
-
-    NVIC_ClearPendingIRQ(UART_1_INST_INT_IRQN);
-    DL_UART_Main_enableInterrupt(UART_1_INST, DL_UART_MAIN_INTERRUPT_RX);
-    NVIC_EnableIRQ(UART_1_INST_INT_IRQN);
-}
-
-static uint8_t IsValueInRange(uint32_t value, uint32_t min_value, uint32_t max_value)
-{
-    return (value >= min_value) && (value <= max_value);
-}
-
-static void DDS_ApplyCurrentMode(void)
-{
-    if (gUiMode == UI_MODE_SINE) {
-        DDS_SetCarrierFrequency(gSineCarrierHz);
-        DDS_SetModType(DDS_MOD_CW);
-    } else if (gUiMode == UI_MODE_AM) {
-        DDS_SetCarrierFrequency(gAmCarrierHz);
-        DDS_SetModFrequency(gAmModFreqHz);
-        DDS_SetAmDepthPercent(gAmDepthPercent);
-        DDS_SetModType(DDS_MOD_AM);
-    } else {
-        DDS_SetCarrierFrequency(gFmCarrierHz);
-        DDS_SetModFrequency(gFmModFreqHz);
-        DDS_SetFmDeviation(gFmDevHz);
-        DDS_SetModType(DDS_MOD_FM);
+    if (value == INPUT_NONE) {
+        OLED_ShowString(x, y, (u8 *) "---");
+        return;
     }
+    oled_show_fixed3(x, y, value);
 }
 
-static void DDS_ApplyStartupConfig(void)
+static void ui_refresh(void)
 {
-    DDS_SetAmDepthPercent(gAmDepthPercent);
-    DDS_SetFmDeviation(gFmDevHz);
-    DDS_ApplyCurrentMode();
-}
+    uint16_t pulse_us = servo_angle_to_pulse_us(servo_angle);
 
-static void EnterInputMode(uint8_t mode)
-{
-    gInputMode = mode;
-    gInputValue = 0UL;
-}
-
-static void ExitInputMode(void)
-{
-    gInputMode = INPUT_NONE;
-    gInputValue = 0UL;
-}
-
-static void SelectUiMode(uint8_t next_mode)
-{
-    gUiMode = next_mode;
-    ExitInputMode();
-    DDS_ApplyCurrentMode();
-}
-
-static void StepAmDepth(int8_t step)
-{
-    int16_t next_depth = (int16_t) gAmDepthPercent + step;
-
-    if (next_depth < 10) {
-        next_depth = 10;
-    } else if (next_depth > 100) {
-        next_depth = 100;
-    }
-
-    gAmDepthPercent = (uint8_t) next_depth;
-    if (gUiMode == UI_MODE_AM) {
-        DDS_SetAmDepthPercent(gAmDepthPercent);
-    }
-}
-
-static void SetFmDeviationLimit(uint16_t limit_hz)
-{
-    gFmDevLimitHz = limit_hz;
-    if (gFmDevHz > gFmDevLimitHz) {
-        gFmDevHz = gFmDevLimitHz;
-    }
-
-    if (gUiMode == UI_MODE_FM) {
-        DDS_SetFmDeviation(gFmDevHz);
-    }
-}
-
-static void ConfirmInputValue(void)
-{
-    switch (gInputMode) {
-        case INPUT_SINE_FREQ:
-            if (IsValueInRange(gInputValue, DDS_CARRIER_FREQ_MIN_HZ, DDS_CARRIER_FREQ_MAX_HZ)) {
-                gSineCarrierHz = gInputValue;
-                DDS_SetCarrierFrequency(gSineCarrierHz);
-                DDS_SetModType(DDS_MOD_CW);
-                ExitInputMode();
-            }
-            break;
-
-        case INPUT_AM_CARRIER:
-            if (IsValueInRange(gInputValue, DDS_CARRIER_FREQ_MIN_HZ, DDS_CARRIER_FREQ_MAX_HZ)) {
-                gAmCarrierHz = gInputValue;
-                DDS_SetCarrierFrequency(gAmCarrierHz);
-                ExitInputMode();
-            }
-            break;
-
-        case INPUT_AM_MOD_FREQ:
-            if (IsValueInRange(gInputValue, DDS_MOD_FREQ_MIN_HZ, DDS_MOD_FREQ_MAX_HZ)) {
-                gAmModFreqHz = gInputValue;
-                DDS_SetModFrequency(gAmModFreqHz);
-                ExitInputMode();
-            }
-            break;
-
-        case INPUT_FM_CARRIER:
-            if (IsValueInRange(gInputValue, DDS_FM_CARRIER_FREQ_MIN_HZ, DDS_CARRIER_FREQ_MAX_HZ)) {
-                gFmCarrierHz = gInputValue;
-                DDS_SetCarrierFrequency(gFmCarrierHz);
-                ExitInputMode();
-            }
-            break;
-
-        case INPUT_FM_MOD_FREQ:
-            if (IsValueInRange(gInputValue, DDS_MOD_FREQ_MIN_HZ, DDS_MOD_FREQ_MAX_HZ)) {
-                gFmModFreqHz = gInputValue;
-                DDS_SetModFrequency(gFmModFreqHz);
-                ExitInputMode();
-            }
-            break;
-
-        case INPUT_FM_DEV:
-            if (gInputValue <= (uint32_t) gFmDevLimitHz) {
-                gFmDevHz = (uint16_t) gInputValue;
-                DDS_SetFmDeviation(gFmDevHz);
-                ExitInputMode();
-            }
-            break;
-
-        default:
-            break;
-    }
-}
-
-static void DisplaySineScreen(void)
-{
-    OLED_ShowString(0, 0, (u8 *) "1S 2A 3F 4Fc ");
-    OLED_ShowString(0, 2, (u8 *) "Mode:SIN");
-    OLED_ShowString(0, 4, (u8 *) "Fc:");
-    OLED_ShowNum(24, 4, (u32) gSineCarrierHz, 8, 16);
-    OLED_ShowString(96, 4, (u8 *) "Hz");
-    OLED_ShowString(0, 6, (u8 *) "CW output      ");
-}
-
-static void DisplayAmScreen(void)
-{
-    OLED_ShowString(0, 0, (u8 *) "1S 2A 3F 4/5  ");
-    OLED_ShowString(0, 2, (u8 *) "Fc:");
-    OLED_ShowNum(24, 2, (u32) gAmCarrierHz, 8, 16);
-    OLED_ShowString(96, 2, (u8 *) "Hz");
-
-    OLED_ShowString(0, 4, (u8 *) "Fm:");
-    OLED_ShowNum(24, 4, (u32) gAmModFreqHz, 7, 16);
-    OLED_ShowString(88, 4, (u8 *) "Hz");
-
-    OLED_ShowString(0, 6, (u8 *) "Dp:");
-    OLED_ShowNum(24, 6, (u32) gAmDepthPercent, 3, 16);
-    OLED_ShowString(48, 6, (u8 *) "% +/-");
-}
-
-static void DisplayFmScreen(void)
-{
-    OLED_ShowString(0, 0, (u8 *) "1S 2A 3F 4/5/6");
-    OLED_ShowString(0, 2, (u8 *) "Fc:");
-    OLED_ShowNum(24, 2, (u32) gFmCarrierHz, 8, 16);
-    OLED_ShowString(96, 2, (u8 *) "Hz");
-
-    OLED_ShowString(0, 4, (u8 *) "Fm:");
-    OLED_ShowNum(24, 4, (u32) gFmModFreqHz, 7, 16);
-    OLED_ShowString(88, 4, (u8 *) "Hz");
-
-    OLED_ShowString(0, 6, (u8 *) "Dv:");
-    OLED_ShowNum(24, 6, (u32) gFmDevHz, 5, 16);
-    OLED_ShowString(72, 6, (u8 *) "L:");
-    OLED_ShowNum(88, 6, (u32) (gFmDevLimitHz / 1000U), 2, 16);
-    OLED_ShowString(104, 6, (u8 *) "K");
-}
-
-static void DisplayInputScreen(void)
-{
-    switch (gInputMode) {
-        case INPUT_SINE_FREQ:
-            OLED_ShowString(0, 0, (u8 *) "Set SIN Fc     ");
-            OLED_ShowString(0, 4, (u8 *) "1Hz-10MHz      ");
-            break;
-
-        case INPUT_AM_CARRIER:
-            OLED_ShowString(0, 0, (u8 *) "Set AM Fc      ");
-            OLED_ShowString(0, 4, (u8 *) "1Hz-10MHz      ");
-            break;
-
-        case INPUT_AM_MOD_FREQ:
-            OLED_ShowString(0, 0, (u8 *) "Set AM Fm      ");
-            OLED_ShowString(0, 4, (u8 *) "1Hz-1MHz       ");
-            break;
-
-        case INPUT_FM_CARRIER:
-            OLED_ShowString(0, 0, (u8 *) "Set FM Fc      ");
-            OLED_ShowString(0, 4, (u8 *) "100k-10MHz     ");
-            break;
-
-        case INPUT_FM_MOD_FREQ:
-            OLED_ShowString(0, 0, (u8 *) "Set FM Fm      ");
-            OLED_ShowString(0, 4, (u8 *) "1Hz-1MHz       ");
-            break;
-
-        case INPUT_FM_DEV:
-            OLED_ShowString(0, 0, (u8 *) "Set FM Dev     ");
-            OLED_ShowString(0, 4, (u8 *) "0-");
-            OLED_ShowNum(16, 4, (u32) gFmDevLimitHz, 5, 16);
-            OLED_ShowString(56, 4, (u8 *) "Hz");
-            break;
-
-        default:
-            break;
-    }
-
-    OLED_ShowString(0, 2, (u8 *) ">");
-    OLED_ShowNum(8, 2, (u32) gInputValue, 10, 16);
-    OLED_ShowString(0, 6, (u8 *) "=OK /CLR *ESC  ");
-}
-
-static void DisplayStatus(void)
-{
     OLED_Clear();
+    OLED_ShowString(0, 0, (u8 *) "MG946R TEST");
 
-    if (gInputMode != INPUT_NONE) {
-        DisplayInputScreen();
-    } else if (gUiMode == UI_MODE_SINE) {
-        DisplaySineScreen();
-    } else if (gUiMode == UI_MODE_AM) {
-        DisplayAmScreen();
-    } else {
-        DisplayFmScreen();
+    OLED_ShowString(0, 2, (u8 *) "A:");
+    oled_show_fixed3(16, 2, servo_angle);
+    OLED_ShowString(48, 2, (u8 *) "S:");
+    oled_show_fixed3(64, 2, servo_step);
+
+    OLED_ShowString(0, 4, (u8 *) "I:");
+    oled_show_input(16, 4, input_value);
+    OLED_ShowString(48, 4, (u8 *) "P:");
+    OLED_ShowNum(64, 4, pulse_us, 4, 16);
+
+    OLED_ShowString(0, 6, (u8 *) "+-MV *S /A");
+}
+
+static int keypad_get_event(void)
+{
+    int key_value = getKeyValue();
+
+    if (key_value == KEY_NONE) {
+        return KEY_NONE;
+    }
+
+    delay_ms(20);
+    if (getKeyValue() != key_value) {
+        return KEY_NONE;
+    }
+
+    while (getKeyValue() != KEY_NONE) {
+        delay_ms(10);
+    }
+
+    return key_value;
+}
+
+static void handle_key_event(int key_value)
+{
+    switch (key_value) {
+        case KEY_DIGIT_0:
+        case KEY_DIGIT_1:
+        case KEY_DIGIT_2:
+        case KEY_DIGIT_3:
+        case KEY_DIGIT_4:
+        case KEY_DIGIT_5:
+        case KEY_DIGIT_6:
+        case KEY_DIGIT_7:
+        case KEY_DIGIT_8:
+        case KEY_DIGIT_9:
+            input_append_digit((uint8_t) key_value);
+            break;
+
+        case KEY_PLUS:
+            servo_apply_angle((uint16_t) (servo_angle + servo_step));
+            break;
+
+        case KEY_MINUS:
+            if (servo_angle > servo_step) {
+                servo_apply_angle((uint16_t) (servo_angle - servo_step));
+            } else {
+                servo_apply_angle(SERVO_MIN_ANGLE_DEG);
+            }
+            break;
+
+        case KEY_CHENG:
+            servo_step = clamp_u16(input_or_default(servo_step), STEP_MIN_DEG, STEP_MAX_DEG);
+            input_clear();
+            break;
+
+        case KEY_CHU:
+            servo_apply_angle(clamp_u16(input_or_default(servo_angle),
+                SERVO_MIN_ANGLE_DEG, SERVO_MAX_ANGLE_DEG));
+            input_clear();
+            break;
+
+        case KEY_EQUAL:
+            servo_apply_angle(SERVO_DEFAULT_ANGLE_DEG);
+            input_clear();
+            break;
+
+        case KEY_NEGATE:
+            if (input_value != INPUT_NONE) {
+                input_clear();
+            } else {
+                servo_apply_angle(SERVO_MIN_ANGLE_DEG);
+            }
+            break;
+
+        default:
+            break;
     }
 }
 
@@ -450,71 +206,17 @@ int main(void)
 {
     SYSCFG_DL_init();
     OLED_Init();
-    OLED_Clear();
-    UART_Init();
-
-    OLED_ShowString(20, 2, (u8 *) "DDS Starting...");
-    delay_ms(1000);
-
-    DDS_ApplyStartupConfig();
-    DisplayStatus();
+    servo_init();
+    ui_refresh();
 
     while (1) {
-        int key = getKeyValue();
+        int key_value = keypad_get_event();
 
-        if (key == KEY_NONE) {
-            continue;
+        if (key_value != KEY_NONE) {
+            handle_key_event(key_value);
+            ui_refresh();
         }
 
-        delay_ms(10);
-        if (getKeyValue() != key) {
-            continue;
-        }
-
-        if ((key >= KEY_DIGIT_0) && (key <= KEY_DIGIT_9)) {
-            if (gInputMode == INPUT_NONE) {
-                if (key == KEY_DIGIT_1) {
-                    SelectUiMode(UI_MODE_SINE);
-                } else if (key == KEY_DIGIT_2) {
-                    SelectUiMode(UI_MODE_AM);
-                } else if (key == KEY_DIGIT_3) {
-                    SelectUiMode(UI_MODE_FM);
-                } else if ((key == KEY_DIGIT_4) && (gUiMode == UI_MODE_SINE)) {
-                    EnterInputMode(INPUT_SINE_FREQ);
-                } else if ((key == KEY_DIGIT_4) && (gUiMode == UI_MODE_AM)) {
-                    EnterInputMode(INPUT_AM_CARRIER);
-                } else if ((key == KEY_DIGIT_5) && (gUiMode == UI_MODE_AM)) {
-                    EnterInputMode(INPUT_AM_MOD_FREQ);
-                } else if ((key == KEY_DIGIT_4) && (gUiMode == UI_MODE_FM)) {
-                    EnterInputMode(INPUT_FM_CARRIER);
-                } else if ((key == KEY_DIGIT_5) && (gUiMode == UI_MODE_FM)) {
-                    EnterInputMode(INPUT_FM_MOD_FREQ);
-                } else if ((key == KEY_DIGIT_6) && (gUiMode == UI_MODE_FM)) {
-                    EnterInputMode(INPUT_FM_DEV);
-                }
-            } else if (gInputValue <= 429496728UL) {
-                gInputValue = gInputValue * 10UL + (uint32_t) key;
-            }
-        } else if (key == KEY_EQUAL) {
-            ConfirmInputValue();
-        } else if ((key == KEY_CHU) && (gInputMode != INPUT_NONE)) {
-            gInputValue = 0UL;
-        } else if ((key == KEY_CHENG) && (gInputMode != INPUT_NONE)) {
-            ExitInputMode();
-        } else if ((key == KEY_PLUS) && (gInputMode == INPUT_NONE) && (gUiMode == UI_MODE_AM)) {
-            StepAmDepth(10);
-        } else if ((key == KEY_MINUS) && (gInputMode == INPUT_NONE) && (gUiMode == UI_MODE_AM)) {
-            StepAmDepth(-10);
-        } else if ((key == KEY_PLUS) && (gInputMode == INPUT_NONE) && (gUiMode == UI_MODE_FM)) {
-            SetFmDeviationLimit(DDS_FM_DEV_LIMIT_10K_HZ);
-        } else if ((key == KEY_MINUS) && (gInputMode == INPUT_NONE) && (gUiMode == UI_MODE_FM)) {
-            SetFmDeviationLimit(DDS_FM_DEV_LIMIT_5K_HZ);
-        }
-
-        DisplayStatus();
-
-        while (getKeyValue() != KEY_NONE) {
-        }
         delay_ms(10);
     }
 }

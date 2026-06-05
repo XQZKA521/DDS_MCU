@@ -82,23 +82,23 @@ extern "C" {
 
 
 
-/* Defines for PWM_0 */
-#define PWM_0_INST                                                         TIMG8
-#define PWM_0_INST_IRQHandler                                   TIMG8_IRQHandler
-#define PWM_0_INST_INT_IRQN                                     (TIMG8_INT_IRQn)
-#define PWM_0_INST_CLK_FREQ                                              1000000
+/* Defines for SERVO_PWM */
+#define SERVO_PWM_INST                                                     TIMG8
+#define SERVO_PWM_INST_IRQHandler                               TIMG8_IRQHandler
+#define SERVO_PWM_INST_INT_IRQN                                 (TIMG8_INT_IRQn)
+#define SERVO_PWM_INST_CLK_FREQ                                          1000000
 /* GPIO defines for channel 0 */
-#define GPIO_PWM_0_C0_PORT                                                 GPIOA
-#define GPIO_PWM_0_C0_PIN                                          DL_GPIO_PIN_7
-#define GPIO_PWM_0_C0_IOMUX                                      (IOMUX_PINCM14)
-#define GPIO_PWM_0_C0_IOMUX_FUNC                     IOMUX_PINCM14_PF_TIMG8_CCP0
-#define GPIO_PWM_0_C0_IDX                                    DL_TIMER_CC_0_INDEX
+#define GPIO_SERVO_PWM_C0_PORT                                             GPIOA
+#define GPIO_SERVO_PWM_C0_PIN                                      DL_GPIO_PIN_7
+#define GPIO_SERVO_PWM_C0_IOMUX                                  (IOMUX_PINCM14)
+#define GPIO_SERVO_PWM_C0_IOMUX_FUNC                 IOMUX_PINCM14_PF_TIMG8_CCP0
+#define GPIO_SERVO_PWM_C0_IDX                                DL_TIMER_CC_0_INDEX
 /* GPIO defines for channel 1 */
-#define GPIO_PWM_0_C1_PORT                                                 GPIOA
-#define GPIO_PWM_0_C1_PIN                                          DL_GPIO_PIN_0
-#define GPIO_PWM_0_C1_IOMUX                                       (IOMUX_PINCM1)
-#define GPIO_PWM_0_C1_IOMUX_FUNC                      IOMUX_PINCM1_PF_TIMG8_CCP1
-#define GPIO_PWM_0_C1_IDX                                    DL_TIMER_CC_1_INDEX
+#define GPIO_SERVO_PWM_C1_PORT                                             GPIOA
+#define GPIO_SERVO_PWM_C1_PIN                                      DL_GPIO_PIN_0
+#define GPIO_SERVO_PWM_C1_IOMUX                                   (IOMUX_PINCM1)
+#define GPIO_SERVO_PWM_C1_IOMUX_FUNC                  IOMUX_PINCM1_PF_TIMG8_CCP1
+#define GPIO_SERVO_PWM_C1_IDX                                DL_TIMER_CC_1_INDEX
 
 
 
@@ -178,25 +178,25 @@ extern "C" {
 #define DHT11_DHT1_PIN                                          (DL_GPIO_PIN_21)
 #define DHT11_DHT1_IOMUX                                         (IOMUX_PINCM49)
 /* Defines for CS: GPIOC.9 with pinCMx 87 on package pin 66 */
-#define GPIO_GRP_0_CS_PORT                                               (GPIOC)
-#define GPIO_GRP_0_CS_PIN                                        (DL_GPIO_PIN_9)
-#define GPIO_GRP_0_CS_IOMUX                                      (IOMUX_PINCM87)
+#define OLED_CS_PORT                                                     (GPIOC)
+#define OLED_CS_PIN                                              (DL_GPIO_PIN_9)
+#define OLED_CS_IOMUX                                            (IOMUX_PINCM87)
 /* Defines for DC: GPIOC.8 with pinCMx 86 on package pin 65 */
-#define GPIO_GRP_0_DC_PORT                                               (GPIOC)
-#define GPIO_GRP_0_DC_PIN                                        (DL_GPIO_PIN_8)
-#define GPIO_GRP_0_DC_IOMUX                                      (IOMUX_PINCM86)
-/* Defines for D0: GPIOB.3 with pinCMx 16 on package pin 19 */
-#define GPIO_GRP_0_D0_PORT                                               (GPIOB)
-#define GPIO_GRP_0_D0_PIN                                        (DL_GPIO_PIN_3)
-#define GPIO_GRP_0_D0_IOMUX                                      (IOMUX_PINCM16)
-/* Defines for D1: GPIOB.2 with pinCMx 15 on package pin 18 */
-#define GPIO_GRP_0_D1_PORT                                               (GPIOB)
-#define GPIO_GRP_0_D1_PIN                                        (DL_GPIO_PIN_2)
-#define GPIO_GRP_0_D1_IOMUX                                      (IOMUX_PINCM15)
+#define OLED_DC_PORT                                                     (GPIOC)
+#define OLED_DC_PIN                                              (DL_GPIO_PIN_8)
+#define OLED_DC_IOMUX                                            (IOMUX_PINCM86)
+/* Defines for SCLK: GPIOB.3 with pinCMx 16 on package pin 19 */
+#define OLED_SCLK_PORT                                                   (GPIOB)
+#define OLED_SCLK_PIN                                            (DL_GPIO_PIN_3)
+#define OLED_SCLK_IOMUX                                          (IOMUX_PINCM16)
+/* Defines for SDIN: GPIOB.2 with pinCMx 15 on package pin 18 */
+#define OLED_SDIN_PORT                                                   (GPIOB)
+#define OLED_SDIN_PIN                                            (DL_GPIO_PIN_2)
+#define OLED_SDIN_IOMUX                                          (IOMUX_PINCM15)
 /* Defines for RES: GPIOB.23 with pinCMx 51 on package pin 70 */
-#define GPIO_GRP_0_RES_PORT                                              (GPIOB)
-#define GPIO_GRP_0_RES_PIN                                      (DL_GPIO_PIN_23)
-#define GPIO_GRP_0_RES_IOMUX                                     (IOMUX_PINCM51)
+#define OLED_RES_PORT                                                    (GPIOB)
+#define OLED_RES_PIN                                            (DL_GPIO_PIN_23)
+#define OLED_RES_IOMUX                                           (IOMUX_PINCM51)
 /* Port definition for Pin Group KEY */
 #define KEY_PORT                                                         (GPIOB)
 
@@ -252,7 +252,7 @@ void SYSCFG_DL_init(void);
 void SYSCFG_DL_initPower(void);
 void SYSCFG_DL_GPIO_init(void);
 void SYSCFG_DL_SYSCTL_init(void);
-void SYSCFG_DL_PWM_0_init(void);
+void SYSCFG_DL_SERVO_PWM_init(void);
 void SYSCFG_DL_TIMER_0_init(void);
 void SYSCFG_DL_UART_0_init(void);
 void SYSCFG_DL_UART_1_init(void);

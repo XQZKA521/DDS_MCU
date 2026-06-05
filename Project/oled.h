@@ -17,25 +17,25 @@
 
 //修改为 M0 平台
 //PA2
-#define OLED_CS_Clr()  DL_GPIO_clearPins(GPIOC,GPIO_GRP_0_CS_PIN)   //片选
-#define OLED_CS_Set()  DL_GPIO_setPins(GPIOC,GPIO_GRP_0_CS_PIN)
+#define OLED_CS_Clr()  DL_GPIO_clearPins(OLED_CS_PORT, OLED_CS_PIN)   //片选
+#define OLED_CS_Set()  DL_GPIO_setPins(OLED_CS_PORT, OLED_CS_PIN)
 
 
 //#define OLED_RST_Clr()  ;
 //#define OLED_RST_Set()  ;
-#define OLED_RST_Clr() DL_GPIO_clearPins(GPIOB, GPIO_GRP_0_RES_PIN) //复位
-#define OLED_RST_Set() DL_GPIO_setPins(GPIOB, GPIO_GRP_0_RES_PIN)
+#define OLED_RST_Clr() DL_GPIO_clearPins(OLED_RES_PORT, OLED_RES_PIN) //复位
+#define OLED_RST_Set() DL_GPIO_setPins(OLED_RES_PORT, OLED_RES_PIN)
 
-#define OLED_DC_Clr() DL_GPIO_clearPins(GPIOC,GPIO_GRP_0_DC_PIN)   //数据/命令
-#define OLED_DC_Set() DL_GPIO_setPins(GPIOC,GPIO_GRP_0_DC_PIN)
+#define OLED_DC_Clr() DL_GPIO_clearPins(OLED_DC_PORT, OLED_DC_PIN)   //数据/命令
+#define OLED_DC_Set() DL_GPIO_setPins(OLED_DC_PORT, OLED_DC_PIN)
 
 
 
-#define OLED_SCLK_Clr() DL_GPIO_clearPins(GPIOB,GPIO_GRP_0_D0_PIN) //时钟 D0
-#define OLED_SCLK_Set() DL_GPIO_setPins(GPIOB,GPIO_GRP_0_D0_PIN )
+#define OLED_SCLK_Clr() DL_GPIO_clearPins(OLED_SCLK_PORT, OLED_SCLK_PIN) //时钟 D0
+#define OLED_SCLK_Set() DL_GPIO_setPins(OLED_SCLK_PORT, OLED_SCLK_PIN )
 
-#define OLED_SDIN_Clr() DL_GPIO_clearPins(GPIOB,GPIO_GRP_0_D1_PIN) //数据 D1
-#define OLED_SDIN_Set() DL_GPIO_setPins(GPIOB,GPIO_GRP_0_D1_PIN )
+#define OLED_SDIN_Clr() DL_GPIO_clearPins(OLED_SDIN_PORT, OLED_SDIN_PIN) //数据 D1
+#define OLED_SDIN_Set() DL_GPIO_setPins(OLED_SDIN_PORT, OLED_SDIN_PIN )
 
 
 
