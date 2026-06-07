@@ -1,7 +1,7 @@
 [
   {
-    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
-    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/User/main.c",
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock/User/main.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -21,8 +21,8 @@
     ]
   },
   {
-    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
-    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/User/ti_msp_dl_config.c",
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock/User/ti_msp_dl_config.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -42,8 +42,8 @@
     ]
   },
   {
-    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
-    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/Project/DHT11.c",
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock/Project/DHT11.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -63,8 +63,8 @@
     ]
   },
   {
-    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
-    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/Project/key.c",
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock/Project/key.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -84,8 +84,8 @@
     ]
   },
   {
-    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
-    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/Project/oled.c",
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock/Project/oled.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
@@ -105,8 +105,8 @@
     ]
   },
   {
-    "directory": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS",
-    "file": "C:/ti/mspm0_sdk_2_08_00_03/myG3519code/DDS/BSP/delay/delay.c",
+    "directory": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock",
+    "file": "c:/ti/mspm0_sdk_2_08_00_03/myG3519code/Smart_Clock/BSP/delay/delay.c",
     "arguments": [
       "C:/Software/Keil_v5/ARM/ARMCLANG/Bin/armclang.exe",
       "--target=arm-arm-none-eabi",
