@@ -1,9 +1,11 @@
 /*
-1 进正弦波模式，2 进 AM 模式，3 进 FM 模式
+1 进正弦波模式，2 进 AM 模式，3 进 FM 模式，7 进 ASK 模式，8 进 PSK 模式
 
 SIN 模式：4 设置载波频率
 AM 模式：4 设置载波，5 设置调制频率，+/- 调 AM 深度
 FM 模式：4 设置载波，5 设置调制频率，6 设置频偏，+ 选 10k 上限，- 选 5k 上限
+ASK/PSK 模式：固定 100kHz 载波，10kbps PRBS 基带
+取反键：全局输出幅度 10%-100%，每次增加 5%，超过上限回到下限
 
 输入时：= 确认，/ 清零，* 退出输入
 
@@ -24,14 +26,23 @@ FM 模式：4 设置载波，5 设置调制频率，6 设置频偏，+ 选 10k �
 #define DDS_ADDR_MOD_FREQ_L     0x05
 #define DDS_ADDR_MOD_FREQ_H     0x06
 #define DDS_ADDR_FM_DEV         0x07
+#define DDS_ADDR_OUTPUT_AMP     0x08
 
 /* ----- DDS modulation types ----- */
 #define DDS_MOD_CW              0x00
 #define DDS_MOD_AM              0x01
 #define DDS_MOD_FM              0x02
+#define DDS_MOD_ASK             0x03
+#define DDS_MOD_PSK             0x04
 
 /* ----- AM depth register scaling ----- */
 #define DDS_AM_DEPTH_FULL_SCALE 32768U
+
+/* ----- Output amplitude scaling ----- */
+#define DDS_OUTPUT_AMP_FULL_SCALE 32768U
+#define DDS_OUTPUT_AMP_MIN_PERCENT 10U
+#define DDS_OUTPUT_AMP_MAX_PERCENT 100U
+#define DDS_OUTPUT_AMP_STEP_PERCENT 5U
 
 /* ----- Frequency limits ----- */
 #define DDS_CARRIER_FREQ_MIN_HZ    1UL
@@ -44,6 +55,10 @@ FM 模式：4 设置载波，5 设置调制频率，6 设置频偏，+ 选 10k �
 #define DDS_FM_DEV_LIMIT_5K_HZ  5000U
 #define DDS_FM_DEV_LIMIT_10K_HZ 10000U
 
+/* ----- ASK/PSK fixed parameters ----- */
+#define DDS_KEYING_CARRIER_HZ   100000UL
+#define DDS_KEYING_BITRATE_BPS  10000UL
+
 /* ----- UART baud rate (default 921600, matched with FPGA) ----- */
 #define UART_DEFAULT_BAUD       921600UL
 
@@ -54,6 +69,8 @@ FM 模式：4 设置载波，5 设置调制频率，6 设置频偏，+ 选 10k �
 #define UI_MODE_SINE            0U
 #define UI_MODE_AM              1U
 #define UI_MODE_FM              2U
+#define UI_MODE_ASK             3U
+#define UI_MODE_PSK             4U
 
 /* ----- Numeric input target ----- */
 #define INPUT_NONE              0U
@@ -79,6 +96,7 @@ static uint32_t gFmCarrierHz     = 100000UL;
 static uint32_t gFmModFreqHz     = 1000UL;
 static uint16_t gFmDevHz         = DDS_FM_DEV_LIMIT_5K_HZ;
 static uint16_t gFmDevLimitHz    = DDS_FM_DEV_LIMIT_5K_HZ;
+static uint8_t  gOutputAmpPercent = DDS_OUTPUT_AMP_MAX_PERCENT;
 
 static void UART_SendByte(uint8_t data)
 {
@@ -102,6 +120,11 @@ static void DDS_SendFrame(uint16_t data, uint8_t addr)
 static uint16_t DDS_AmDepthPercentToReg(uint8_t depth_percent)
 {
     return (uint16_t)((((uint32_t) depth_percent) * DDS_AM_DEPTH_FULL_SCALE + 50U) / 100U);
+}
+
+static uint16_t DDS_OutputAmpPercentToReg(uint8_t amp_percent)
+{
+    return (uint16_t)((((uint32_t) amp_percent) * DDS_OUTPUT_AMP_FULL_SCALE + 50U) / 100U);
 }
 
 static void DDS_SetCarrierFrequency(uint32_t freq_hz)
@@ -129,6 +152,11 @@ static void DDS_SetAmDepthPercent(uint8_t depth_percent)
 static void DDS_SetFmDeviation(uint16_t deviation_hz)
 {
     DDS_SendFrame(deviation_hz, DDS_ADDR_FM_DEV);
+}
+
+static void DDS_SetOutputAmplitudePercent(uint8_t amp_percent)
+{
+    DDS_SendFrame(DDS_OutputAmpPercentToReg(amp_percent), DDS_ADDR_OUTPUT_AMP);
 }
 
 void UART_0_INST_IRQHandler(void)
@@ -224,11 +252,15 @@ static void DDS_ApplyCurrentMode(void)
         DDS_SetModFrequency(gAmModFreqHz);
         DDS_SetAmDepthPercent(gAmDepthPercent);
         DDS_SetModType(DDS_MOD_AM);
-    } else {
+    } else if (gUiMode == UI_MODE_FM) {
         DDS_SetCarrierFrequency(gFmCarrierHz);
         DDS_SetModFrequency(gFmModFreqHz);
         DDS_SetFmDeviation(gFmDevHz);
         DDS_SetModType(DDS_MOD_FM);
+    } else if (gUiMode == UI_MODE_ASK) {
+        DDS_SetModType(DDS_MOD_ASK);
+    } else {
+        DDS_SetModType(DDS_MOD_PSK);
     }
 }
 
@@ -236,6 +268,7 @@ static void DDS_ApplyStartupConfig(void)
 {
     DDS_SetAmDepthPercent(gAmDepthPercent);
     DDS_SetFmDeviation(gFmDevHz);
+    DDS_SetOutputAmplitudePercent(gOutputAmpPercent);
     DDS_ApplyCurrentMode();
 }
 
@@ -284,6 +317,20 @@ static void SetFmDeviationLimit(uint16_t limit_hz)
     if (gUiMode == UI_MODE_FM) {
         DDS_SetFmDeviation(gFmDevHz);
     }
+}
+
+static void StepOutputAmplitude(void)
+{
+    if (gOutputAmpPercent >= DDS_OUTPUT_AMP_MAX_PERCENT) {
+        gOutputAmpPercent = DDS_OUTPUT_AMP_MIN_PERCENT;
+    } else {
+        gOutputAmpPercent += DDS_OUTPUT_AMP_STEP_PERCENT;
+        if (gOutputAmpPercent > DDS_OUTPUT_AMP_MAX_PERCENT) {
+            gOutputAmpPercent = DDS_OUTPUT_AMP_MIN_PERCENT;
+        }
+    }
+
+    DDS_SetOutputAmplitudePercent(gOutputAmpPercent);
 }
 
 static void ConfirmInputValue(void)
@@ -350,7 +397,9 @@ static void DisplaySineScreen(void)
     OLED_ShowString(0, 4, (u8 *) "Fc:");
     OLED_ShowNum(24, 4, (u32) gSineCarrierHz, 8, 16);
     OLED_ShowString(96, 4, (u8 *) "Hz");
-    OLED_ShowString(0, 6, (u8 *) "CW output      ");
+    OLED_ShowString(0, 6, (u8 *) "A:");
+    OLED_ShowNum(16, 6, (u32) gOutputAmpPercent, 3, 16);
+    OLED_ShowString(40, 6, (u8 *) "% NEG");
 }
 
 static void DisplayAmScreen(void)
@@ -364,9 +413,11 @@ static void DisplayAmScreen(void)
     OLED_ShowNum(24, 4, (u32) gAmModFreqHz, 7, 16);
     OLED_ShowString(88, 4, (u8 *) "Hz");
 
-    OLED_ShowString(0, 6, (u8 *) "Dp:");
+    OLED_ShowString(0, 6, (u8 *) "D:");
     OLED_ShowNum(24, 6, (u32) gAmDepthPercent, 3, 16);
-    OLED_ShowString(48, 6, (u8 *) "% +/-");
+    OLED_ShowString(48, 6, (u8 *) "% A:");
+    OLED_ShowNum(80, 6, (u32) gOutputAmpPercent, 3, 16);
+    OLED_ShowString(104, 6, (u8 *) "%");
 }
 
 static void DisplayFmScreen(void)
@@ -380,11 +431,39 @@ static void DisplayFmScreen(void)
     OLED_ShowNum(24, 4, (u32) gFmModFreqHz, 7, 16);
     OLED_ShowString(88, 4, (u8 *) "Hz");
 
-    OLED_ShowString(0, 6, (u8 *) "Dv:");
+    OLED_ShowString(0, 6, (u8 *) "D:");
     OLED_ShowNum(24, 6, (u32) gFmDevHz, 5, 16);
-    OLED_ShowString(72, 6, (u8 *) "L:");
-    OLED_ShowNum(88, 6, (u32) (gFmDevLimitHz / 1000U), 2, 16);
-    OLED_ShowString(104, 6, (u8 *) "K");
+    OLED_ShowString(64, 6, (u8 *) " A:");
+    OLED_ShowNum(88, 6, (u32) gOutputAmpPercent, 3, 16);
+    OLED_ShowString(112, 6, (u8 *) "%");
+}
+
+static void DisplayAskScreen(void)
+{
+    OLED_ShowString(0, 0, (u8 *) "1S 2A 3F 7A 8P");
+    OLED_ShowString(0, 2, (u8 *) "Mode:ASK PRBS  ");
+    OLED_ShowString(0, 4, (u8 *) "Fc:");
+    OLED_ShowNum(24, 4, (u32) (DDS_KEYING_CARRIER_HZ / 1000UL), 3, 16);
+    OLED_ShowString(48, 4, (u8 *) "k A:");
+    OLED_ShowNum(80, 4, (u32) gOutputAmpPercent, 3, 16);
+    OLED_ShowString(104, 4, (u8 *) "%");
+    OLED_ShowString(0, 6, (u8 *) "Rb:");
+    OLED_ShowNum(24, 6, (u32) (DDS_KEYING_BITRATE_BPS / 1000UL), 2, 16);
+    OLED_ShowString(40, 6, (u8 *) "kbps PRBS");
+}
+
+static void DisplayPskScreen(void)
+{
+    OLED_ShowString(0, 0, (u8 *) "1S 2A 3F 7A 8P");
+    OLED_ShowString(0, 2, (u8 *) "Mode:PSK PRBS  ");
+    OLED_ShowString(0, 4, (u8 *) "Fc:");
+    OLED_ShowNum(24, 4, (u32) (DDS_KEYING_CARRIER_HZ / 1000UL), 3, 16);
+    OLED_ShowString(48, 4, (u8 *) "k A:");
+    OLED_ShowNum(80, 4, (u32) gOutputAmpPercent, 3, 16);
+    OLED_ShowString(104, 4, (u8 *) "%");
+    OLED_ShowString(0, 6, (u8 *) "Rb:");
+    OLED_ShowNum(24, 6, (u32) (DDS_KEYING_BITRATE_BPS / 1000UL), 2, 16);
+    OLED_ShowString(40, 6, (u8 *) "kbps PRBS");
 }
 
 static void DisplayInputScreen(void)
@@ -441,8 +520,12 @@ static void DisplayStatus(void)
         DisplaySineScreen();
     } else if (gUiMode == UI_MODE_AM) {
         DisplayAmScreen();
-    } else {
+    } else if (gUiMode == UI_MODE_FM) {
         DisplayFmScreen();
+    } else if (gUiMode == UI_MODE_ASK) {
+        DisplayAskScreen();
+    } else {
+        DisplayPskScreen();
     }
 }
 
@@ -479,6 +562,10 @@ int main(void)
                     SelectUiMode(UI_MODE_AM);
                 } else if (key == KEY_DIGIT_3) {
                     SelectUiMode(UI_MODE_FM);
+                } else if (key == KEY_DIGIT_7) {
+                    SelectUiMode(UI_MODE_ASK);
+                } else if (key == KEY_DIGIT_8) {
+                    SelectUiMode(UI_MODE_PSK);
                 } else if ((key == KEY_DIGIT_4) && (gUiMode == UI_MODE_SINE)) {
                     EnterInputMode(INPUT_SINE_FREQ);
                 } else if ((key == KEY_DIGIT_4) && (gUiMode == UI_MODE_AM)) {
@@ -509,6 +596,8 @@ int main(void)
             SetFmDeviationLimit(DDS_FM_DEV_LIMIT_10K_HZ);
         } else if ((key == KEY_MINUS) && (gInputMode == INPUT_NONE) && (gUiMode == UI_MODE_FM)) {
             SetFmDeviationLimit(DDS_FM_DEV_LIMIT_5K_HZ);
+        } else if ((key == KEY_NEGATE) && (gInputMode == INPUT_NONE)) {
+            StepOutputAmplitude();
         }
 
         DisplayStatus();
