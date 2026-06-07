@@ -165,10 +165,8 @@ extern "C" {
 #define DMA_CH0_TRIGGER_SEL_SW                               (DMA_SOFTWARE_TRIG)
 
 
-/* Port definition for Pin Group LED */
-#define LED_PORT                                                         (GPIOA)
-
 /* Defines for LED4: GPIOA.14 with pinCMx 36 on package pin 43 */
+#define LED_LED4_PORT                                                    (GPIOA)
 #define LED_LED4_PIN                                            (DL_GPIO_PIN_14)
 #define LED_LED4_IOMUX                                           (IOMUX_PINCM36)
 /* Port definition for Pin Group DHT11 */
@@ -224,6 +222,10 @@ extern "C" {
 /* Defines for V4: GPIOB.27 with pinCMx 58 on package pin 77 */
 #define KEY_V4_PIN                                              (DL_GPIO_PIN_27)
 #define KEY_V4_IOMUX                                             (IOMUX_PINCM58)
+/* Defines for LED8: GPIOC.7 with pinCMx 85 on package pin 64 */
+#define LED_LED8_PORT                                                    (GPIOC)
+#define LED_LED8_PIN                                             (DL_GPIO_PIN_7)
+#define LED_LED8_IOMUX                                           (IOMUX_PINCM85)
 
 
 /* Defines for TRNG */

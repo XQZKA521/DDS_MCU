@@ -189,8 +189,10 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		 DL_GPIO_INVERSION_DISABLE, DL_GPIO_RESISTOR_PULL_DOWN,
 		 DL_GPIO_HYSTERESIS_DISABLE, DL_GPIO_WAKEUP_DISABLE);
 
-    DL_GPIO_clearPins(LED_PORT, LED_LED4_PIN);
-    DL_GPIO_enableOutput(LED_PORT, LED_LED4_PIN);
+    DL_GPIO_initDigitalOutput(LED_LED8_IOMUX);
+
+    DL_GPIO_clearPins(GPIOA, LED_LED4_PIN);
+    DL_GPIO_enableOutput(GPIOA, LED_LED4_PIN);
     DL_GPIO_clearPins(GPIOB, OLED_SCLK_PIN |
 		OLED_SDIN_PIN |
 		OLED_RES_PIN |
@@ -206,9 +208,11 @@ SYSCONFIG_WEAK void SYSCFG_DL_GPIO_init(void)
 		KEY_H3_PIN |
 		KEY_H4_PIN);
     DL_GPIO_clearPins(GPIOC, OLED_CS_PIN |
-		OLED_DC_PIN);
+		OLED_DC_PIN |
+		LED_LED8_PIN);
     DL_GPIO_enableOutput(GPIOC, OLED_CS_PIN |
-		OLED_DC_PIN);
+		OLED_DC_PIN |
+		LED_LED8_PIN);
 
 }
 
@@ -405,6 +409,11 @@ SYSCONFIG_WEAK void SYSCFG_DL_UART_1_init(void)
     DL_UART_Main_setOversampling(UART_1_INST, DL_UART_OVERSAMPLING_RATE_16X);
     DL_UART_Main_setBaudRateDivisor(UART_1_INST, UART_1_IBRD_80_MHZ_9600_BAUD, UART_1_FBRD_80_MHZ_9600_BAUD);
 
+
+    /* Configure Interrupts */
+    DL_UART_Main_enableInterrupt(UART_1_INST,
+                                 DL_UART_MAIN_INTERRUPT_RX |
+                                 DL_UART_MAIN_INTERRUPT_TX);
 
 
     DL_UART_Main_enable(UART_1_INST);
