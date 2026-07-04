@@ -166,14 +166,25 @@ extern "C" {
 #define GPIO_ADC12_UI_IOMUX_C1                                   (IOMUX_PINCM59)
 #define GPIO_ADC12_UI_IOMUX_C1_FUNC               (IOMUX_PINCM59_PF_UNCONNECTED)
 
+/* Defines for ADC12_I */
+#define ADC12_I_INST                                                        ADC1
+#define ADC12_I_INST_IRQHandler                                  ADC1_IRQHandler
+#define ADC12_I_INST_INT_IRQN                                    (ADC1_INT_IRQn)
+#define ADC12_I_ADCMEM_0                                      DL_ADC12_MEM_IDX_0
+#define ADC12_I_ADCMEM_0_REF                DL_ADC12_REFERENCE_VOLTAGE_VDDA_VSSA
+#define GPIO_ADC12_I_C0_PORT                                               GPIOA
+#define GPIO_ADC12_I_C0_PIN                                       DL_GPIO_PIN_15
+#define GPIO_ADC12_I_IOMUX_C0                                    (IOMUX_PINCM37)
+#define GPIO_ADC12_I_IOMUX_C0_FUNC                (IOMUX_PINCM37_PF_UNCONNECTED)
 
 
-/* Defines for DMA_CH0 */
-#define DMA_CH0_CHAN_ID                                                      (1)
-#define DMA_CH0_TRIGGER_SEL_SW                               (DMA_SOFTWARE_TRIG)
+
 /* Defines for DMA_UI */
-#define DMA_UI_CHAN_ID                                                       (0)
+#define DMA_UI_CHAN_ID                                                       (1)
 #define ADC12_UI_INST_DMA_TRIGGER                     (DMA_ADC0_EVT_GEN_BD_TRIG)
+/* Defines for DMA_CH0 */
+#define DMA_CH0_CHAN_ID                                                      (0)
+#define DMA_CH0_TRIGGER_SEL_SW                               (DMA_SOFTWARE_TRIG)
 
 
 /* Port definition for Pin Group LED */
@@ -247,16 +258,6 @@ extern "C" {
 
 
 
-
-/* Defines for DAC12 */
-#define DAC12_IRQHandler                                         DAC0_IRQHandler
-#define DAC12_INT_IRQN                                           (DAC0_INT_IRQn)
-#define GPIO_DAC12_OUT_PORT                                                GPIOA
-#define GPIO_DAC12_OUT_PIN                                        DL_GPIO_PIN_15
-#define GPIO_DAC12_IOMUX_OUT                                     (IOMUX_PINCM37)
-#define GPIO_DAC12_IOMUX_OUT_FUNC                   IOMUX_PINCM37_PF_UNCONNECTED
-
-
 /* clang-format on */
 
 void SYSCFG_DL_init(void);
@@ -268,10 +269,10 @@ void SYSCFG_DL_TIMER_TIMG_init(void);
 void SYSCFG_DL_UART_0_init(void);
 void SYSCFG_DL_UART_1_init(void);
 void SYSCFG_DL_ADC12_UI_init(void);
+void SYSCFG_DL_ADC12_I_init(void);
 void SYSCFG_DL_DMA_init(void);
 
 void SYSCFG_DL_TRNG_init(void);
-void SYSCFG_DL_DAC12_init(void);
 
 bool SYSCFG_DL_saveConfiguration(void);
 bool SYSCFG_DL_restoreConfiguration(void);

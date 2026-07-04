@@ -14,6 +14,9 @@
 #define VOFA_SAMPLE_STRIDE (SAMPLE_POINTS / VOFA_SEND_POINTS)
 #define ADC_REF_VOLTAGE 3.3f
 #define ADC_FULL_SCALE_COUNTS 4096.0f
+#define ADC_CHANNEL_COUNT 2
+#define ADC_VOLTAGE_CH 0
+#define ADC_CURRENT_CH 1
 
 // 交错存放ADC结果，偶数存电压(0,2,4)，奇数存电流(1,3,5)
 // 加 volatile 是警告编译器：别瞎优化，这个数据在后台会被DMA悄悄改掉！
@@ -46,7 +49,12 @@ static float g_powerFactorSum = 0.0f;
 // 直连 ADC 时为 1；若前端把 10V 缩放到 ADC 上 1V，则应填 10。
 #define VOLT_FRONTEND_GAIN 0.7215386f
 #define VOLT_CAL_FACTOR ((ADC_REF_VOLTAGE / ADC_FULL_SCALE_COUNTS) * VOLT_FRONTEND_GAIN)
-#define CURR_CAL_FACTOR 0.002f 
+// PA26 采到的是采样电阻/电流检测前端上的电压，电流按 I = U / R 换算。
+// 这里的 0.402832f 等效于原来的 0.002A/code；实际使用时请改成真实采样电阻值。
+#define CURRENT_SENSE_RESISTANCE_OHM 0.402832f
+#define CURRENT_FRONTEND_GAIN 1.0f
+#define ADC_CODE_TO_PIN_VOLT ((ADC_REF_VOLTAGE / ADC_FULL_SCALE_COUNTS))
+#define CURR_CAL_FACTOR ((ADC_CODE_TO_PIN_VOLT * CURRENT_FRONTEND_GAIN) / CURRENT_SENSE_RESISTANCE_OHM)
 
 static uint32_t Float_Scale_Pow10(uint8_t frac_len)
 {
@@ -146,6 +154,21 @@ static void DMA_Reload_ADC_Buffer(void)
     DL_DMA_enableChannel(DMA, DMA_UI_CHAN_ID);
 }
 
+static uint16_t ADC_GetSampleCode(uint16_t sample_index, uint8_t channel)
+{
+    return adc_buffer[sample_index * ADC_CHANNEL_COUNT + channel];
+}
+
+static float ADC_CodeDeltaToVoltage(float code_delta)
+{
+    return code_delta * VOLT_CAL_FACTOR;
+}
+
+static float ADC_CodeDeltaToCurrent(float code_delta)
+{
+    return code_delta * CURR_CAL_FACTOR;
+}
+
 static void ADC_Stop_Sampling(void)
 {
     DL_TimerA_stopCounter(TIMER_TIMG_INST);
@@ -201,21 +224,83 @@ static void UART0_SendUint(uint32_t value)
     }
 }
 
+static void UART0_SendInt(int32_t value)
+{
+    if (value < 0) {
+        UART0_SendChar('-');
+        value = -value;
+    }
+
+    UART0_SendUint((uint32_t)value);
+}
+
+static void UART0_SendFloat(float value, uint8_t frac_len)
+{
+    uint32_t scale = Float_Scale_Pow10(frac_len);
+    uint32_t divisor;
+    int32_t integer_part;
+    uint32_t fraction_part;
+    uint32_t scaled_fraction;
+
+    if (value < 0.0f) {
+        UART0_SendChar('-');
+        value = -value;
+    }
+
+    integer_part = (int32_t)value;
+    scaled_fraction = (uint32_t)((value - (float)integer_part) * (float)scale + 0.5f);
+
+    if (scaled_fraction >= scale) {
+        integer_part++;
+        scaled_fraction -= scale;
+    }
+
+    fraction_part = scaled_fraction;
+    UART0_SendInt(integer_part);
+
+    if (frac_len > 0) {
+        UART0_SendChar('.');
+        divisor = scale / 10;
+
+        while (frac_len--) {
+            UART0_SendChar((char)('0' + ((fraction_part / divisor) % 10)));
+            divisor /= 10;
+        }
+    }
+}
+
 static void VOFA_SendWaveform(void)
 {
+    float v_dc_offset = 0.0f;
+    float i_dc_offset = 0.0f;
+
+    for (uint16_t n = 0; n < SAMPLE_POINTS; n++) {
+        v_dc_offset += ADC_GetSampleCode(n, ADC_VOLTAGE_CH);
+        i_dc_offset += ADC_GetSampleCode(n, ADC_CURRENT_CH);
+    }
+
+    v_dc_offset /= SAMPLE_POINTS;
+    i_dc_offset /= SAMPLE_POINTS;
+
     for (uint16_t n = 0; n < SAMPLE_POINTS; n += VOFA_SAMPLE_STRIDE) {
-        UART0_SendUint(adc_buffer[n * 2]);
+        float v_wave = ADC_CodeDeltaToVoltage(
+            (float)ADC_GetSampleCode(n, ADC_VOLTAGE_CH) - v_dc_offset);
+        float i_wave = ADC_CodeDeltaToCurrent(
+            (float)ADC_GetSampleCode(n, ADC_CURRENT_CH) - i_dc_offset);
+
+        UART0_SendFloat(v_wave, 4);
+        UART0_SendChar(',');
+        UART0_SendFloat(i_wave, 4);
         UART0_SendString("\r\n");
     }
 }
 
-static bool Find_Voltage_Cycle_Window(uint16_t *start_sample, uint16_t *end_sample,
-    float *v_dc_offset, float *i_dc_offset, uint16_t *vpp_code)
+static bool Find_ADC_Cycle_Window(uint8_t channel, uint16_t *start_sample,
+    uint16_t *end_sample, float *dc_offset, uint16_t *vpp_code, float *frequency)
 {
-    long long v_sum = 0;
-    long long i_sum = 0;
-    uint16_t v_max = 0;
-    uint16_t v_min = 4095;
+    long long sum = 0;
+    uint16_t code_max = 0;
+    uint16_t code_min = 4095;
     uint16_t dc_mid;
     uint16_t hys;
     uint16_t edges[32];
@@ -223,27 +308,25 @@ static bool Find_Voltage_Cycle_Window(uint16_t *start_sample, uint16_t *end_samp
     bool high_state = false;
 
     for (uint16_t n = 0; n < SAMPLE_POINTS; n++) {
-        uint16_t v_code = adc_buffer[n * 2];
+        uint16_t code = ADC_GetSampleCode(n, channel);
 
-        v_sum += v_code;
-        i_sum += adc_buffer[n * 2 + 1];
-        if (v_code > v_max) {
-            v_max = v_code;
+        sum += code;
+        if (code > code_max) {
+            code_max = code;
         }
-        if (v_code < v_min) {
-            v_min = v_code;
+        if (code < code_min) {
+            code_min = code;
         }
     }
 
-    dc_mid = (uint16_t)(v_sum / SAMPLE_POINTS);
-    *vpp_code = v_max - v_min;
-    *v_dc_offset = (float)dc_mid;
-    *i_dc_offset = (float)i_sum / SAMPLE_POINTS;
+    dc_mid = (uint16_t)(sum / SAMPLE_POINTS);
+    *vpp_code = code_max - code_min;
+    *dc_offset = (float)dc_mid;
 
     if (*vpp_code < MIN_SIGNAL_VPP_CODE) {
         *start_sample = 0;
         *end_sample = SAMPLE_POINTS;
-        g_Signal_Frequency = 0.0f;
+        *frequency = 0.0f;
         return false;
     }
 
@@ -251,19 +334,19 @@ static bool Find_Voltage_Cycle_Window(uint16_t *start_sample, uint16_t *end_samp
 
     // 使用三点平均 + 滞回阈值检测上升沿，降低噪声导致的重复触发。
     for (uint16_t n = 1; n < SAMPLE_POINTS - 1; n++) {
-        uint16_t smooth_v = (adc_buffer[(n - 1) * 2] +
-                             adc_buffer[n * 2] +
-                             adc_buffer[(n + 1) * 2]) / 3;
+        uint16_t smooth_code = (ADC_GetSampleCode(n - 1, channel) +
+                                ADC_GetSampleCode(n, channel) +
+                                ADC_GetSampleCode(n + 1, channel)) / 3;
 
         if (!high_state) {
-            if (smooth_v > (uint16_t)(dc_mid + hys)) {
+            if (smooth_code > (uint16_t)(dc_mid + hys)) {
                 if (edge_count < (sizeof(edges) / sizeof(edges[0]))) {
                     edges[edge_count++] = n;
                 }
                 high_state = true;
             }
         } else {
-            if (smooth_v < (uint16_t)(dc_mid - hys)) {
+            if (smooth_code < (uint16_t)(dc_mid - hys)) {
                 high_state = false;
             }
         }
@@ -272,15 +355,51 @@ static bool Find_Voltage_Cycle_Window(uint16_t *start_sample, uint16_t *end_samp
     if (edge_count < 2) {
         *start_sample = 0;
         *end_sample = SAMPLE_POINTS;
-        g_Signal_Frequency = 0.0f;
+        *frequency = 0.0f;
         return false;
     }
 
     *start_sample = edges[0];
     *end_sample = edges[edge_count - 1];
-    g_Signal_Frequency = ADC_SAMPLE_RATE_HZ * (float)(edge_count - 1) /
+    *frequency = ADC_SAMPLE_RATE_HZ * (float)(edge_count - 1) /
         (float)(*end_sample - *start_sample);
     return true;
+}
+
+static float ADC_CalculateWindowDC(uint8_t channel, uint16_t start_sample,
+    uint16_t end_sample)
+{
+    float dc_offset = 0.0f;
+    uint16_t points = end_sample - start_sample;
+
+    if (points == 0) {
+        return 0.0f;
+    }
+
+    for (uint16_t n = start_sample; n < end_sample; n++) {
+        dc_offset += ADC_GetSampleCode(n, channel);
+    }
+
+    return dc_offset / points;
+}
+
+static float ADC_CalculateRmsCode(uint8_t channel, uint16_t start_sample,
+    uint16_t end_sample, float dc_offset)
+{
+    float square_sum = 0.0f;
+    uint16_t points = end_sample - start_sample;
+
+    if (points == 0) {
+        return 0.0f;
+    }
+
+    for (uint16_t n = start_sample; n < end_sample; n++) {
+        float ac_code = (float)ADC_GetSampleCode(n, channel) - dc_offset;
+
+        square_sum += ac_code * ac_code;
+    }
+
+    return sqrt(square_sum / points);
 }
 
 
@@ -292,15 +411,23 @@ void Calculate_Power_And_RMS(void) {
     static float filt_i_rms = 0.0f;
     static float filt_power = 0.0f;
     static float filt_pf = 0.0f;
-    uint16_t start_sample;
-    uint16_t end_sample;
-    uint16_t calc_points;
-    uint16_t vpp_code;
+    uint16_t v_start_sample;
+    uint16_t v_end_sample;
+    uint16_t i_start_sample;
+    uint16_t i_end_sample;
+    uint16_t power_points;
+    uint16_t v_vpp_code;
+    uint16_t i_vpp_code;
+    float voltage_frequency;
+    float current_frequency;
     float v_dc_offset;
     float i_dc_offset;
-    float v_sq_sum = 0.0f; // 电压平方和
-    float i_sq_sum = 0.0f; // 电流平方和
+    float power_v_dc_offset;
+    float power_i_dc_offset;
     float p_sum = 0.0f;    // 瞬时功率乘积累加和
+    float v_rms_adc;
+    float i_rms_adc;
+    float p_adc;
     float raw_v_rms;
     float raw_i_rms;
     float raw_power;
@@ -308,45 +435,40 @@ void Calculate_Power_And_RMS(void) {
     float apparent_power;
     float alpha;
 
-    // 优先从电压通道找上升沿，截取整数个完整周期做 RMS/功率计算。
-    // 如果边沿不足，则退回整段缓冲区计算，避免显示被清零锁死。
-    if (!Find_Voltage_Cycle_Window(&start_sample, &end_sample,
-        &v_dc_offset, &i_dc_offset, &vpp_code)) {
-        start_sample = 0;
-        end_sample = SAMPLE_POINTS;
-    }
-    calc_points = end_sample - start_sample;
+    // 电压通道使用 PA27/ADC CH0，电流通道使用 PA26/ADC CH1。
+    // 两个通道各自找周期窗口和直流偏置，避免把电压采样窗口套到电流 RMS 上。
+    Find_ADC_Cycle_Window(ADC_VOLTAGE_CH, &v_start_sample, &v_end_sample,
+        &v_dc_offset, &v_vpp_code, &voltage_frequency);
+    Find_ADC_Cycle_Window(ADC_CURRENT_CH, &i_start_sample, &i_end_sample,
+        &i_dc_offset, &i_vpp_code, &current_frequency);
+    g_Signal_Frequency = voltage_frequency;
 
-    if (calc_points == 0) {
+    if ((v_end_sample <= v_start_sample) || (i_end_sample <= i_start_sample)) {
         return;
     }
 
-    v_dc_offset = 0.0f;
-    i_dc_offset = 0.0f;
-    for (uint16_t n = start_sample; n < end_sample; n++) {
-        v_dc_offset += adc_buffer[n * 2];
-        i_dc_offset += adc_buffer[n * 2 + 1];
-    }
-    v_dc_offset /= calc_points;
-    i_dc_offset /= calc_points;
+    v_dc_offset = ADC_CalculateWindowDC(ADC_VOLTAGE_CH, v_start_sample, v_end_sample);
+    i_dc_offset = ADC_CalculateWindowDC(ADC_CURRENT_CH, i_start_sample, i_end_sample);
+    v_rms_adc = ADC_CalculateRmsCode(ADC_VOLTAGE_CH, v_start_sample, v_end_sample,
+        v_dc_offset);
+    i_rms_adc = ADC_CalculateRmsCode(ADC_CURRENT_CH, i_start_sample, i_end_sample,
+        i_dc_offset);
 
-    for (uint16_t n = start_sample; n < end_sample; n++) {
+    power_points = v_end_sample - v_start_sample;
+    power_v_dc_offset = ADC_CalculateWindowDC(ADC_VOLTAGE_CH, v_start_sample,
+        v_end_sample);
+    power_i_dc_offset = ADC_CalculateWindowDC(ADC_CURRENT_CH, v_start_sample,
+        v_end_sample);
+
+    for (uint16_t n = v_start_sample; n < v_end_sample; n++) {
         // 减去偏置，还原真实交流波形 (此时波形有正有负)
-        float v_ac = (float)adc_buffer[n * 2] - v_dc_offset;
-        float i_ac = (float)adc_buffer[n * 2 + 1] - i_dc_offset;
+        float v_ac = (float)ADC_GetSampleCode(n, ADC_VOLTAGE_CH) - power_v_dc_offset;
+        float i_ac = (float)ADC_GetSampleCode(n, ADC_CURRENT_CH) - power_i_dc_offset;
         
-        v_sq_sum += (v_ac * v_ac);
-        i_sq_sum += (i_ac * i_ac);
         p_sum += (v_ac * i_ac);
     }
-    
-   
-    // 第三步：计算纯数字量下的 RMS 和 有功功率
-   
-    // RMS = sqrt(平方和 / 采样点数)
-    float v_rms_adc = sqrt(v_sq_sum / calc_points);
-    float i_rms_adc = sqrt(i_sq_sum / calc_points);
-    float p_adc = p_sum / calc_points;
+
+    p_adc = p_sum / power_points;
     
     
     // 第四步：乘以标定系数，还原为真实世界的物理量 //

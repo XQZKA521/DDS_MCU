@@ -58,9 +58,9 @@ SYSCONFIG_WEAK void SYSCFG_DL_init(void)
     SYSCFG_DL_UART_0_init();
     SYSCFG_DL_UART_1_init();
     SYSCFG_DL_ADC12_UI_init();
+    SYSCFG_DL_ADC12_I_init();
     SYSCFG_DL_DMA_init();
     SYSCFG_DL_TRNG_init();
-    SYSCFG_DL_DAC12_init();
     /* Ensure backup structures have no valid state */
 
 	gTIMER_TIMGBackup.backupRdy 	= false;
@@ -103,9 +103,9 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_UART_Main_reset(UART_0_INST);
     DL_UART_Main_reset(UART_1_INST);
     DL_ADC12_reset(ADC12_UI_INST);
+    DL_ADC12_reset(ADC12_I_INST);
 
     DL_TRNG_reset(TRNG);
-    DL_DAC12_reset(DAC0);
 
     DL_GPIO_enablePower(GPIOA);
     DL_GPIO_enablePower(GPIOB);
@@ -115,9 +115,9 @@ SYSCONFIG_WEAK void SYSCFG_DL_initPower(void)
     DL_UART_Main_enablePower(UART_0_INST);
     DL_UART_Main_enablePower(UART_1_INST);
     DL_ADC12_enablePower(ADC12_UI_INST);
+    DL_ADC12_enablePower(ADC12_I_INST);
 
     DL_TRNG_enablePower(TRNG);
-    DL_DAC12_enablePower(DAC0);
     delay_cycles(POWER_STARTUP_DELAY);
 }
 
@@ -441,7 +441,39 @@ SYSCONFIG_WEAK void SYSCFG_DL_ADC12_UI_init(void)
     DL_ADC12_setSubscriberChanID(ADC12_UI_INST,ADC12_UI_INST_SUB_CH);
     DL_ADC12_enableConversions(ADC12_UI_INST);
 }
+/* ADC12_I Initialization */
+static const DL_ADC12_ClockConfig gADC12_IClockConfig = {
+    .clockSel       = DL_ADC12_CLOCK_SYSOSC,
+    .divideRatio    = DL_ADC12_CLOCK_DIVIDE_1,
+    .freqRange      = DL_ADC12_CLOCK_FREQ_RANGE_24_TO_32,
+};
+SYSCONFIG_WEAK void SYSCFG_DL_ADC12_I_init(void)
+{
+    DL_ADC12_setClockConfig(ADC12_I_INST, (DL_ADC12_ClockConfig *) &gADC12_IClockConfig);
+    DL_ADC12_configConversionMem(ADC12_I_INST, ADC12_I_ADCMEM_0,
+        DL_ADC12_INPUT_CHAN_0, DL_ADC12_REFERENCE_VOLTAGE_VDDA_VSSA, DL_ADC12_SAMPLE_TIMER_SOURCE_SCOMP0, DL_ADC12_AVERAGING_MODE_DISABLED,
+        DL_ADC12_BURN_OUT_SOURCE_DISABLED, DL_ADC12_TRIGGER_MODE_AUTO_NEXT, DL_ADC12_WINDOWS_COMP_MODE_DISABLED);
+    DL_ADC12_enableConversions(ADC12_I_INST);
+}
 
+static const DL_DMA_Config gDMA_UIConfig = {
+    .transferMode   = DL_DMA_SINGLE_BLOCK_TRANSFER_MODE,
+    .extendedMode   = DL_DMA_NORMAL_MODE,
+    .destIncrement  = DL_DMA_ADDR_INCREMENT,
+    .srcIncrement   = DL_DMA_ADDR_UNCHANGED,
+    .destWidth      = DL_DMA_WIDTH_HALF_WORD,
+    .srcWidth       = DL_DMA_WIDTH_HALF_WORD,
+    .trigger        = ADC12_UI_INST_DMA_TRIGGER,
+    .triggerType    = DL_DMA_TRIGGER_TYPE_EXTERNAL,
+};
+
+SYSCONFIG_WEAK void SYSCFG_DL_DMA_UI_init(void)
+{
+    DL_DMA_clearInterruptStatus(DMA, DL_DMA_INTERRUPT_CHANNEL1);
+    DL_DMA_enableInterrupt(DMA, DL_DMA_INTERRUPT_CHANNEL1);
+    DL_DMA_setTransferSize(DMA, DMA_UI_CHAN_ID, 256);
+    DL_DMA_initChannel(DMA, DMA_UI_CHAN_ID , (DL_DMA_Config *) &gDMA_UIConfig);
+}
 static const DL_DMA_Config gDMA_CH0Config = {
     .transferMode   = DL_DMA_SINGLE_TRANSFER_MODE,
     .extendedMode   = DL_DMA_NORMAL_MODE,
@@ -457,27 +489,9 @@ SYSCONFIG_WEAK void SYSCFG_DL_DMA_CH0_init(void)
 {
     DL_DMA_initChannel(DMA, DMA_CH0_CHAN_ID , (DL_DMA_Config *) &gDMA_CH0Config);
 }
-static const DL_DMA_Config gDMA_UIConfig = {
-    .transferMode   = DL_DMA_SINGLE_BLOCK_TRANSFER_MODE,
-    .extendedMode   = DL_DMA_NORMAL_MODE,
-    .destIncrement  = DL_DMA_ADDR_INCREMENT,
-    .srcIncrement   = DL_DMA_ADDR_UNCHANGED,
-    .destWidth      = DL_DMA_WIDTH_HALF_WORD,
-    .srcWidth       = DL_DMA_WIDTH_HALF_WORD,
-    .trigger        = ADC12_UI_INST_DMA_TRIGGER,
-    .triggerType    = DL_DMA_TRIGGER_TYPE_EXTERNAL,
-};
-
-SYSCONFIG_WEAK void SYSCFG_DL_DMA_UI_init(void)
-{
-    DL_DMA_clearInterruptStatus(DMA, DL_DMA_INTERRUPT_CHANNEL0);
-    DL_DMA_enableInterrupt(DMA, DL_DMA_INTERRUPT_CHANNEL0);
-    DL_DMA_setTransferSize(DMA, DMA_UI_CHAN_ID, 256);
-    DL_DMA_initChannel(DMA, DMA_UI_CHAN_ID , (DL_DMA_Config *) &gDMA_UIConfig);
-}
 SYSCONFIG_WEAK void SYSCFG_DL_DMA_init(void){
-    SYSCFG_DL_DMA_CH0_init();
     SYSCFG_DL_DMA_UI_init();
+    SYSCFG_DL_DMA_CH0_init();
 }
 
 
@@ -491,24 +505,5 @@ SYSCONFIG_WEAK void SYSCFG_DL_TRNG_init(void)
     DL_TRNG_clearInterruptStatus(TRNG, DL_TRNG_INTERRUPT_CMD_DONE_EVENT);
 
     DL_TRNG_setDecimationRate(TRNG, DL_TRNG_DECIMATION_RATE_4);
-}
-
-static const DL_DAC12_Config gDAC12Config = {
-    .outputEnable              = DL_DAC12_OUTPUT_ENABLED,
-    .resolution                = DL_DAC12_RESOLUTION_12BIT,
-    .representation            = DL_DAC12_REPRESENTATION_BINARY,
-    .voltageReferenceSource    = DL_DAC12_VREF_SOURCE_VDDA_VSSA,
-    .amplifierSetting          = DL_DAC12_AMP_ON,
-    .fifoEnable                = DL_DAC12_FIFO_DISABLED,
-    .fifoTriggerSource         = DL_DAC12_FIFO_TRIGGER_SAMPLETIMER,
-    .dmaTriggerEnable          = DL_DAC12_DMA_TRIGGER_DISABLED,
-    .dmaTriggerThreshold       = DL_DAC12_FIFO_THRESHOLD_ONE_QTR_EMPTY,
-    .sampleTimeGeneratorEnable = DL_DAC12_SAMPLETIMER_DISABLE,
-    .sampleRate                = DL_DAC12_SAMPLES_PER_SECOND_500,
-};
-SYSCONFIG_WEAK void SYSCFG_DL_DAC12_init(void)
-{
-    DL_DAC12_init(DAC0, (DL_DAC12_Config *) &gDAC12Config);
-    DL_DAC12_enable(DAC0);
 }
 
