@@ -93,7 +93,7 @@ __Vectors       DCD     __initial_sp              ; Top of Stack
                 DCD     TIMG8_IRQHandler          ;  3:  TIMG8 interrupt handler
                 DCD     UART3_IRQHandler          ;  4:  UART3 interrupt handler
                 DCD     ADC0_IRQHandler           ;  5:  ADC0 interrupt handler
-                DCD     ADC0_IRQHandler           ;  6:  ADC1 interrupt handler
+                DCD     ADC1_IRQHandler           ;  6:  ADC1 interrupt handler
                 DCD     CANFD0_IRQHandler         ;  7:  CANFD0 interrupt handler
                 DCD     DAC0_IRQHandler           ;  8:  DAC0 interrupt handler
                 DCD     TIMG9_IRQHandler          ;  9:  TIMG9 interrupt handler

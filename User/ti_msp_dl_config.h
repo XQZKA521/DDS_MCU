@@ -107,7 +107,7 @@ extern "C" {
 #define TIMER_TIMG_INST_IRQHandler                              TIMA0_IRQHandler
 #define TIMER_TIMG_INST_INT_IRQN                                (TIMA0_INT_IRQn)
 #define TIMER_TIMG_INST_LOAD_VALUE                                      (12499U)
-#define TIMER_TIMG_INST_PUB_0_CH                                             (1)
+#define TIMER_TIMG_INST_PUB_0_CH                                            (12)
 
 
 
@@ -156,7 +156,7 @@ extern "C" {
 #define ADC12_UI_ADCMEM_U_REF               DL_ADC12_REFERENCE_VOLTAGE_VDDA_VSSA
 #define ADC12_UI_ADCMEM_1                                     DL_ADC12_MEM_IDX_1
 #define ADC12_UI_ADCMEM_1_REF               DL_ADC12_REFERENCE_VOLTAGE_VDDA_VSSA
-#define ADC12_UI_INST_SUB_CH                                                 (1)
+#define ADC12_UI_INST_SUB_CH                                                (12)
 #define GPIO_ADC12_UI_C0_PORT                                              GPIOA
 #define GPIO_ADC12_UI_C0_PIN                                      DL_GPIO_PIN_27
 #define GPIO_ADC12_UI_IOMUX_C0                                   (IOMUX_PINCM60)
@@ -172,6 +172,9 @@ extern "C" {
 #define ADC12_I_INST_INT_IRQN                                    (ADC1_INT_IRQn)
 #define ADC12_I_ADCMEM_0                                      DL_ADC12_MEM_IDX_0
 #define ADC12_I_ADCMEM_0_REF                DL_ADC12_REFERENCE_VOLTAGE_VDDA_VSSA
+#define ADC12_I_ADCMEM_1                                      DL_ADC12_MEM_IDX_1
+#define ADC12_I_ADCMEM_1_REF                DL_ADC12_REFERENCE_VOLTAGE_VDDA_VSSA
+#define ADC12_I_INST_SUB_CH                                                 (12)
 #define GPIO_ADC12_I_C0_PORT                                               GPIOA
 #define GPIO_ADC12_I_C0_PIN                                       DL_GPIO_PIN_15
 #define GPIO_ADC12_I_IOMUX_C0                                    (IOMUX_PINCM37)
@@ -180,11 +183,14 @@ extern "C" {
 
 
 /* Defines for DMA_UI */
-#define DMA_UI_CHAN_ID                                                       (1)
+#define DMA_UI_CHAN_ID                                                       (2)
 #define ADC12_UI_INST_DMA_TRIGGER                     (DMA_ADC0_EVT_GEN_BD_TRIG)
 /* Defines for DMA_CH0 */
-#define DMA_CH0_CHAN_ID                                                      (0)
+#define DMA_CH0_CHAN_ID                                                      (1)
 #define DMA_CH0_TRIGGER_SEL_SW                               (DMA_SOFTWARE_TRIG)
+/* Defines for DMA_CH1 */
+#define DMA_CH1_CHAN_ID                                                      (0)
+#define ADC12_I_INST_DMA_TRIGGER                      (DMA_ADC1_EVT_GEN_BD_TRIG)
 
 
 /* Port definition for Pin Group LED */
